@@ -1,0 +1,2 @@
+VK_TOKEN=
+DATABASE=sqlite+aiosqlite:///./bot.db
