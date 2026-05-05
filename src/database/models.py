@@ -13,11 +13,14 @@ class Locations(Base):
     description: Mapped[str] = mapped_column(String(500))
     
     # Связь путей с локациями
-    edges: Mapped[list["Edges"]] = relationship(
-        foreign_keys="Edge.from_id",
+    outgoing_edges: Mapped[list["Edges"]] = relationship(
+        foreign_keys="Edges.from_id",
         back_populates="from_location"
     )
-    players: Mapped[list["Players"]] = relationship(back_populates="location")
+    incoming_edges: Mapped[list["Edges"]] = relationship(
+        foreign_keys="Edges.to_id",
+        back_populates="to_location"
+    )
 
 # Модель путей между локациями
 class Edges(Base):
@@ -25,9 +28,16 @@ class Edges(Base):
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     from_id: Mapped[int] = mapped_column(ForeignKey("locations.id"), index=True)
-    to_id: Mapped[int] = mapped_column(Integer, index=True)
+    to_id: Mapped[int] = mapped_column(ForeignKey("locations.id"), index=True)
 
-    from_location: Mapped["Locations"] = relationship(back_populates="edges")
+    from_location: Mapped["Locations"] = relationship(
+        foreign_keys=[from_id],
+        back_populates="outgoing_edges"
+    )
+    to_location: Mapped["Locations"] = relationship(
+        foreign_keys=[to_id],
+        back_populates="incoming_edges"
+    )
 
 # Модель игроков
 class Players(Base):
@@ -35,6 +45,4 @@ class Players(Base):
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     vk_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
-    location_id: Mapped[int] = mapped_column(ForeignKey("locations.id"))
-
-    location: Mapped["Locations"] = relationship(back_populates="players")
+    location_id: Mapped[int] = mapped_column(Integer, default=1, nullable=False, index=True)
