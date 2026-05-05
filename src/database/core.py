@@ -6,7 +6,6 @@ from typing import AsyncGenerator
 
 DATABASE = settings.DATABASE
 
-
 engine = create_async_engine(
     DATABASE,
     echo = True,
@@ -18,7 +17,6 @@ AsyncSessionMaker = async_sessionmaker(
     expire_on_commit=True,
     autoflush=False,
 )
-
 
 @asynccontextmanager
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

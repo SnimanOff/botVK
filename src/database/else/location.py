@@ -3,7 +3,7 @@ from pathlib import Path
 from sqlalchemy import select, delete
 from database.core import get_session
 from database.models import Locations, Edges
-from logger import logger
+from loguru import logger
 
 async def add_locations(maps_directory: str = "maps") -> bool:
 
