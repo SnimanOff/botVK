@@ -1,13 +1,13 @@
 import json
 from pathlib import Path
-from sqlalchemy import select, delete
+from sqlalchemy import delete
 from database.core import get_session
 from database.models import Locations, Edges
 from loguru import logger
 
 async def add_locations(maps_directory: str = "maps") -> bool:
 
-    BASE_DIR = Path(__file__).resolve().parent.parent.parent
+    BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
     MAPS_PATH =  BASE_DIR / maps_directory
     
     logger.debug("Путь к картам: {}", MAPS_PATH)
@@ -38,7 +38,6 @@ async def add_locations(maps_directory: str = "maps") -> bool:
             raise
         
         async with get_session() as session:
-            
             edges_deleted = await session.execute(delete(Edges))
             location_deleted = await session.execute(delete(Locations))
             await session.commit()
