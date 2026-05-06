@@ -13,7 +13,7 @@ class UserService:
         Ищет профиль пользователя в базе данных по vk_id
         При ненаходе создаёт профиль 
         
-        возвращает модель игрока
+        Возвращает модель игрока
         """
         async with get_session() as session:
             result = await session.execute(
@@ -39,6 +39,13 @@ class UserService:
         
         @staticmethod
         async def get_item(code: str) -> Items:
+            """
+            get item 
+
+            Получение предмета из SQL бд
+
+            Возвращает модель предмета
+            """
             async with get_session() as session:
                 result = await session.execute(
                     select(Items)
@@ -51,4 +58,5 @@ class UserService:
                     logger.debug("Запрашиваемый предмет не найден, код искуемого: {}", code)
                     return item
                 else:
-                    
+                    logger.debug("Запрашиваемый предмет найден и передан: {}", code)
+                    return item

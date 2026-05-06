@@ -5,6 +5,7 @@ from database.core import get_session
 from database.models import Locations, Edges
 from loguru import logger
 
+
 async def add_locations(maps_directory: str = "maps") -> bool:
 
     BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
