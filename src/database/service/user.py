@@ -35,7 +35,7 @@ class UserService:
             await session.commit()
             await session.refresh(player)
             
-            logger.info("Создан игрок id={}, vk_id={}", player.id, vk_id)
+            logger.debug("Создан игрок id={}, vk_id={}", player.id, vk_id)
             return player
         
     @staticmethod
@@ -45,7 +45,7 @@ class UserService:
 
         Получение предмета из SQL бд
 
-        Возвращает модель предмета
+        Возвращает модель предмета и результат операции
         """
         async with get_session() as session:
             result = await session.execute(
@@ -70,7 +70,7 @@ class UserService:
 
         Выдача предмета по модели и коду предмета
 
-        Возвращает или изменённое или неизменённый профиль
+        Возвращает или изменённое или неизменённый профиль и результат операции
         """
         async with get_session() as session:
             item = await UserService.get_item(item_code)
@@ -94,7 +94,7 @@ class UserService:
             await session.commit()
             await session.refresh(player)
             
-            logger.info("Предмет {} успешно выдан игроку vk_id={}", item_code, player.vk_id)
+            logger.debug("Предмет {} успешно выдан игроку vk_id={}", item_code, player.vk_id)
 
             return player, True
         
@@ -103,7 +103,7 @@ class UserService:
         """
         get player item 
         
-        Возвращает предмет в передаваемом слоте
+        Возвращает предмет в передаваемом слоте и результат операции
         """
         code = player.inventory.get(slot)
         
@@ -119,7 +119,7 @@ class UserService:
         """
         get paths 
         
-        Возвращает список локаций куда можно попасть
+        Возвращает список локаций куда можно попасть и результат операции
         """
         async with get_session() as session:
             result = await session.execute(
@@ -136,3 +136,30 @@ class UserService:
             
             logger.debug("Из локации {} доступно {} путей", location_id, len(locations))
             return list(locations), True
+        
+    @staticmethod
+    async def player_move(player: Players, move: int) -> tuple[Players, bool]:
+        """
+        player move 
+        
+        Метод получая модель игрока и ход, проверяет возможность хода
+        После чего если ход возможен перемещает игрока
+        
+        Возвращает модель игрока и результат операции
+        """
+        location = player.location_id
+        async with get_session() as session:
+            paths = await UserService.get_paths(location)
+            
+            available_ids = [loc.id_location for loc in paths]
+            
+            if move not in available_ids:
+                logger.debug("Путь {} недоступен из локации {}", move, location)
+                return player, False
+            
+            player.location_id = move
+            await session.commit()
+            await session.refresh(player)
+            
+            logger.debug("Игрок {} перемещён в {}", player.vk_id, move)
+            return player, True
