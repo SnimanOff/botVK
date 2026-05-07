@@ -39,7 +39,7 @@ class UserService:
             return player
         
     @staticmethod
-    async def get_item(code: str) -> tuple[Items, bool]:
+    async def get_item(code: str) -> tuple[Items | None, bool]:
         """
         get item 
 
@@ -97,3 +97,19 @@ class UserService:
             logger.info("Предмет {} успешно выдан игроку vk_id={}", item_code, player.vk_id)
 
             return player, True
+        
+        @staticmethod
+        async def GP_item(player: Players, slot: str) -> tuple[str, bool]:
+            """
+            get player item 
+            
+            Возвращает предмет в передаваемом слоте
+            """
+            code = player.inventory.get(slot)
+            
+            if not code: 
+                logger.debug("Слот {}, пуст у игрока {}", slot, player.vk_id)
+                return code, False
+            
+            logger.debug("Найден предмет {} в слоте {}", code, slot)
+            return code, True

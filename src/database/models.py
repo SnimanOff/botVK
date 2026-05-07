@@ -58,6 +58,7 @@ class Players(Base):
     attack: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
     balance: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     
+    inventory: Mapped[dict] = mapped_column(JSON, default=lambda:DEFAULT_EQUIPMENT.copy())
 # Модель всех предметов
 class Items(Base):
     __tablename__ = "items"
