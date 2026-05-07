@@ -1,6 +1,6 @@
 from sqlalchemy import select, insert
 from database.core import get_session
-from database.models import Players, Items
+from database.models import Players, Items, Locations, Edges
 from loguru import logger
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -98,18 +98,41 @@ class UserService:
 
             return player, True
         
-        @staticmethod
-        async def GP_item(player: Players, slot: str) -> tuple[str, bool]:
-            """
-            get player item 
+    @staticmethod
+    async def GP_item(player: Players, slot: str) -> tuple[str, bool]:
+        """
+        get player item 
+        
+        Возвращает предмет в передаваемом слоте
+        """
+        code = player.inventory.get(slot)
+        
+        if not code: 
+            logger.debug("Слот {}, пуст у игрока {}", slot, player.vk_id)
+            return code, False
+        
+        logger.debug("Найден предмет {} в слоте {}", code, slot)
+        return code, True
+    
+    @staticmethod
+    async def get_paths(location_id: int) -> list[Locations| None, bool]:
+        """
+        get paths 
+        
+        Возвращает список локаций куда можно попасть
+        """
+        async with get_session() as session:
+            result = await session.execute(
+                select(Locations)
+                .join(Edges, Edges.to_id == Locations.id)
+                .where(Edges.from_id == location_id)
+            )
             
-            Возвращает предмет в передаваемом слоте
-            """
-            code = player.inventory.get(slot)
+            locations = result.scalars().all()
             
-            if not code: 
-                logger.debug("Слот {}, пуст у игрока {}", slot, player.vk_id)
-                return code, False
+            if not locations:
+                logger.error("Путей из локации {}, нет", location_id)
+                return None, False
             
-            logger.debug("Найден предмет {} в слоте {}", code, slot)
-            return code, True
+            logger.debug("Из локации {} доступно {} путей", location_id, len(locations))
+            return list(locations), True
