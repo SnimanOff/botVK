@@ -115,7 +115,7 @@ class UserService:
         return code, True
     
     @staticmethod
-    async def get_paths(location_id: int) -> list[Locations| None, bool]:
+    async def get_paths(location_id: int) -> list[list | None, bool]:
         """
         get paths 
         
@@ -163,3 +163,35 @@ class UserService:
             
             logger.debug("Игрок {} перемещён в {}", player.vk_id, move)
             return player, True
+        
+    @staticmethod
+    async def Go_items(player: Players, item_type: str) -> tuple[list[str], bool]:
+        async with get_session() as session:
+            player_codes = set()
+            
+            if item_type == "weapon":
+                if player.inventory.get("weapon"):
+                    player_codes.add(player.inventory["weapon"])
+            elif item_type == "armor":
+                if player.inventory.get("armor"):
+                    player.codes.add(player.inventory["armor"])
+            elif item_type == "ring":
+                if player.inventory.get("ring"):
+                    player_codes.add(player.inventory["ring"])
+            else:
+                player_codes.update(player.inventory.get("bag", []))
+            
+            result = await session.execute(
+                select(Items.code)
+                .where(Items.type == item_type)
+            )
+            all_codes = {row[0] for row in result.all()}
+            
+            available = list(all_codes - player_codes)
+            
+            if not available:
+                logger.debug("Нет доступных предметов типа {} для игрока {}", item_type, player.vk_id)
+                return [], False
+            
+            logger.debug("Найдено {} предметов типа {} для игрока {}", len(available), item_type, player.vk_id)
+            return available, True
