@@ -250,3 +250,58 @@ class UserService:
             await session.commit()
             await session.refresh(player)
             return player, True
+    
+    @staticmethod
+    async def remove_item(player: Players, slot: str) -> tuple[Players, bool]:
+        """
+        remove item
+        
+        Удаляет предмет из указанного слота или сумки по индексу
+        
+        Возвращает модель игрока и результат операции
+        """
+        inventory = player.inventory
+        async with get_session() as session:
+            if slot in ["weapon", "armor", "ring"]:
+                if not inventory.get(slot):
+                    logger.debug("Слот {} уже пуст у игрока {}", slot, player.vk_id)
+                    return player, False
+                
+                inventory[slot] = None
+                
+            elif slot == "bag":
+                logger.error("Для сумки данный метод не подходит, используй remove_from_bag с индексом")
+                return player, False
+            
+            else:
+                logger.error("Неизвестный слот: {}", slot)
+                return player, False
+            
+            await session.commit()
+            await session.refresh(player)
+            logger.debug("Предмет удалён из слота {} у игрока {}", slot, player.vk_id)
+            return player, True
+
+    @staticmethod
+    async def remove_from_bag(player: Players, index: int) -> tuple[Players, bool]:
+        """
+        remove from bag
+        
+        Удаляет предмет из сумки по индексу
+        
+        Возвращает модель игрока и результат операции
+        """
+        async with get_session() as session:
+            bag = player.inventory.get("bag", [])
+            
+            if index < 0 or index >= len(bag):
+                logger.debug("Индекс {} вне диапазона сумки у игрока {}", index, player.vk_id)
+                return player, False
+            
+            removed = bag.pop(index)
+            player.inventory["bag"] = bag
+            
+            await session.commit()
+            await session.refresh(player)
+            logger.debug("Предмет {} удалён из сумки у игрока {}", removed, player.vk_id)
+            return player, True

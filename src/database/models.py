@@ -1,5 +1,6 @@
 from sqlalchemy import String, Integer, ForeignKey, JSON, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.ext.mutable import MutableDict
 from database.core import Base
 from pathlib import Path
 from typing import Optional
@@ -57,7 +58,9 @@ class Players(Base):
     balance: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     dungeon: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False) # находится ли в данже
     
-    inventory: Mapped[dict] = mapped_column(JSON, default=lambda:DEFAULT_EQUIPMENT.copy())
+    inventory: Mapped[dict] = mapped_column(MutableDict.as_mutable(JSON), default=lambda: DEFAULT_EQUIPMENT.copy())
+    
+    
     
 # Модель всех предметов
 class Items(Base):
