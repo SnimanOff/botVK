@@ -60,8 +60,6 @@ class Players(Base):
     
     inventory: Mapped[dict] = mapped_column(MutableDict.as_mutable(JSON), default=lambda: DEFAULT_EQUIPMENT.copy())
     
-    
-    
 # Модель всех предметов
 class Items(Base):
     __tablename__ = "items"
@@ -73,3 +71,11 @@ class Items(Base):
     slot: Mapped[Optional[str]] = mapped_column(String(20))
     stats: Mapped[dict] = mapped_column(JSON, default=dict)
     price: Mapped[int] = mapped_column(Integer, default=0)
+    
+class Battles(Base):
+    __tablename__ = "battles"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    vk_id: Mapped[int] = mapped_column(Integer, index=True)
+    state: Mapped[dict] = mapped_column(MutableDict.as_mutable(JSON), nullable=False)
+    status: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

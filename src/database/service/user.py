@@ -1,6 +1,6 @@
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from database.core import get_session
-from database.models import Players, Items, Locations, Edges
+from database.models import Players, Items, Locations, Edges, Battles
 from loguru import logger
 from sqlalchemy.orm.attributes import flag_modified
 from settings import settings
@@ -306,52 +306,68 @@ class UserService:
             await session.refresh(player)
             logger.debug("Предмет {} удалён из сумки у игрока {}", removed, player.vk_id)
             return player, True
-        
+    
+    
+    # check
     @staticmethod
     async def use_item(player: Players, index: int) -> tuple[Players, bool]:
-        """
-        use item 
-        
-        Использует предмет из сумки по индексу, после чего удаляет его 
-        
-        Эффекты работают через database/effects
-        
-        Возвращает модель игрока и результат выполнения
-        """
         bag = player.inventory.get("bag", [])
-        
         if index < 0 or index >= len(bag):
-            logger.debug("Индекс {} вне диапазона у игрока {}", index, player.vk_id)
             return player, False
-        
+
         code = bag[index]
         item, ok = await UserService.get_item(code)
-        
-        if not ok:
-            logger.error("Предмет {} не найден в БД", code)
-            return player, False
-        
-        effect_name = item.stats.get("effect")
-        value = item.stats.get("value")
-        
-        effect_func = EFFECTS.get(effect_name)
-        if not effect_func:
-            logger.debug("Эффект {} не найден для предмета {}", effect_name, code)
-            return player, False
-        
-        player, ok = await effect_func(player, value)
         if not ok:
             return player, False
-        
-        bag.pop(index)
-        player.inventory["bag"] = bag
-        
-        async with get_session() as session:
-            merged = await session.merge(player)
-            await session.commit()
-            await session.refresh(merged)
-            logger.debug("Предмет {} использован игроком {}", code, player.vk_id)
-            return merged, True
+
+        stats = item.stats   # dict, например {"stat": "attack", "modifier": 10, "duration": 3}
+
+        # Если это бафф (имеет stat и modifier)
+        if "stat" in stats and "modifier" in stats:
+            # Находим активный бой
+            async with get_session() as session:
+                result = await session.execute(
+                    select(Battles)
+                    .where(and_(Battles.vk_id == player.vk_id, Battles.status == True))
+                    .order_by(Battles.created_at.desc())
+                )
+                battle = result.scalar_one_or_none()
+                if not battle:
+                    logger.warning("Бафф вне боя – игнорируем")
+                    return player, False
+
+                state = battle.state
+                state.setdefault("player_buffs", []).append(stats)   # просто добавляем stats
+                flag_modified(battle, "state")
+                await session.commit()
+                logger.debug(f"Бафф {stats} добавлен игроку {player.vk_id}")
+
+            # Удаляем использованный предмет
+            bag.pop(index)
+            player.inventory["bag"] = bag
+            # Сохраняем игрока
+            async with get_session() as session:
+                merged = await session.merge(player)
+                await session.commit()
+                await session.refresh(merged)
+                return merged, True
+        else:
+            # Лечение, урон и т.д. – обрабатываем по старой логике (через EFFECTS)
+            effect_name = stats.get("effect")
+            value = stats.get("value")
+            effect_func = EFFECTS.get(effect_name)
+            if not effect_func:
+                return player, False
+            player, ok = await effect_func(player, value)
+            if not ok:
+                return player, False
+            bag.pop(index)
+            player.inventory["bag"] = bag
+            async with get_session() as session:
+                merged = await session.merge(player)
+                await session.commit()
+                await session.refresh(merged)
+                return merged, True
     
     @staticmethod
     async def add_balance(player: Players, amount: int) -> tuple[Players, bool]:
@@ -419,3 +435,5 @@ class UserService:
                 player.vk_id, item.name, final_price, old_item_code, sell_price
             )
             return merged, True
+    
+    

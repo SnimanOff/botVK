@@ -1,0 +1,12 @@
+{
+  "code": "strength_potion",
+  "name": "Strength Potion",
+  "type": "else",
+  "slot": null,
+  "stats": {
+    "stat": "attack",
+    "modifier": 10,
+    "duration": 3
+  },
+  "price": 30
+}
