@@ -1,4 +1,4 @@
-from sqlalchemy import select, insert
+from sqlalchemy import select
 from database.core import get_session
 from database.models import Players, Items, Locations, Edges
 from loguru import logger
@@ -164,6 +164,13 @@ class UserService:
         
     @staticmethod
     async def Go_items(player: Players, item_type: str) -> tuple[list[str], bool]:
+        """
+        get other items
+        
+        Получает все предметы не принадлежащие игроку
+        
+        возвращает список (list) предметов и результат операции
+        """
         async with get_session() as session:
             player_codes = set()
             
@@ -196,16 +203,23 @@ class UserService:
         
     @staticmethod
     async def enter_dungeon(player: Players) -> tuple[Players, bool]:
+        """
+        enter dungeon 
+        
+        Запускает пользователя в данж при выполнении условий
+        
+        Возвращает модель игрока и результат операции
+        """
         in_dungeon = player.dungeon
         player_location = player.location_id
-        enter_location = settings.ENTER_DUNGEON
+        enter_location = settings.DUNGEON_LOCATION
         
         if in_dungeon:
-            logger.error("Игрок {} попытался войти в данж хотя, уже в нём", player.vk_id)
+            logger.warning("Игрок {} попытался войти в данж, хотя уже в нём", player.vk_id)
             return player, False
 
         if player_location != enter_location:
-            logger.error("Игрок {} попытался войти в данж, хотя не находится на нужной клетке", player.vk_id)
+            logger.warning("Игрок {} попытался войти в данж, хотя не находится на нужной клетке", player.vk_id)
             return player, False
 
         async with get_session() as session:
@@ -214,4 +228,25 @@ class UserService:
             await session.refresh(player)
             return player, True
         
-    
+    @staticmethod
+    async def exit_dungeon(player: Players) -> tuple[Players, bool]:
+        """
+        exit dungeon 
+        
+        Выпускает пользователя в данж при выполнении условий
+        
+        Возвращает модель игрока и результат операции
+        """
+        in_dungeon = player.dungeon
+        exit_location = settings.DUNGEON_LOCATION
+        
+        if not in_dungeon:
+            logger.warning("Игрок {} попытался выйти из данжа, хотя там не находится", player.vk_id)
+            return player, False
+        
+        async with get_session() as session:
+            player.dungeon = False
+            player.location_id = exit_location
+            await session.commit()
+            await session.refresh(player)
+            return player, True
