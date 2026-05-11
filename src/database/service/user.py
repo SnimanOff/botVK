@@ -309,6 +309,15 @@ class UserService:
         
     @staticmethod
     async def use_item(player: Players, index: int) -> tuple[Players, bool]:
+        """
+        use item 
+        
+        Использует предмет из сумки по индексу, после чего удаляет его 
+        
+        Эффекты работают через database/effects
+        
+        Возвращает модель игрока и результат выполнения
+        """
         bag = player.inventory.get("bag", [])
         
         if index < 0 or index >= len(bag):
