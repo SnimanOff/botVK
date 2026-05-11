@@ -3,6 +3,7 @@ from database.core import get_session
 from database.models import Players, Items, Locations, Edges
 from loguru import logger
 from sqlalchemy.orm.attributes import flag_modified
+from settings import settings
 
 class UserService:
     
@@ -124,17 +125,15 @@ class UserService:
         async with get_session() as session:
             result = await session.execute(
                 select(Locations)
-                .join(Edges, Edges.to_id == Locations.id)
+                .join(Edges, Edges.to_id == Locations.id_location)
                 .where(Edges.from_id == location_id)
             )
             
             locations = result.scalars().all()
             
             if not locations:
-                logger.error("Путей из локации {}, нет", location_id)
-                return None, False
+                return [], False
             
-            logger.debug("Из локации {} доступно {} путей", location_id, len(locations))
             return list(locations), True
         
     @staticmethod
@@ -149,19 +148,18 @@ class UserService:
         """
         location = player.location_id
         async with get_session() as session:
-            paths = await UserService.get_paths(location)
+            paths, ok = await UserService.get_paths(location)
+            if not ok:
+                return player, False
             
             available_ids = [loc.id_location for loc in paths]
             
             if move not in available_ids:
-                logger.debug("Путь {} недоступен из локации {}", move, location)
                 return player, False
             
             player.location_id = move
             await session.commit()
             await session.refresh(player)
-            
-            logger.debug("Игрок {} перемещён в {}", player.vk_id, move)
             return player, True
         
     @staticmethod
@@ -195,3 +193,25 @@ class UserService:
             
             logger.debug("Найдено {} предметов типа {} для игрока {}", len(available), item_type, player.vk_id)
             return available, True
+        
+    @staticmethod
+    async def enter_dungeon(player: Players) -> tuple[Players, bool]:
+        in_dungeon = player.dungeon
+        player_location = player.location_id
+        enter_location = settings.ENTER_DUNGEON
+        
+        if in_dungeon:
+            logger.error("Игрок {} попытался войти в данж хотя, уже в нём", player.vk_id)
+            return player, False
+
+        if player_location != enter_location:
+            logger.error("Игрок {} попытался войти в данж, хотя не находится на нужной клетке", player.vk_id)
+            return player, False
+
+        async with get_session() as session:
+            player.dungeon = True
+            await session.commit()
+            await session.refresh(player)
+            return player, True
+        
+    

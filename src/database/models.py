@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer, ForeignKey, JSON
+from sqlalchemy import String, Integer, ForeignKey, JSON, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database.core import Base
 from pathlib import Path
@@ -11,12 +11,10 @@ DEFAULT_EQUIPMENT = json.loads(Path("default_equipment.json").read_text())
 class Locations(Base):
     __tablename__ = "locations"
     
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    id_location: Mapped[int] = mapped_column(Integer, unique=True)
+    id_location: Mapped[int] = mapped_column(Integer, primary_key=True)  # PK = твой ID из JSON
     name: Mapped[str] = mapped_column(String(100))
     description: Mapped[str] = mapped_column(String(500))
     
-    # Связь путей с локациями
     outgoing_edges: Mapped[list["Edges"]] = relationship(
         foreign_keys="Edges.from_id",
         back_populates="from_location"
@@ -31,8 +29,8 @@ class Edges(Base):
     __tablename__ = "edges"
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    from_id: Mapped[int] = mapped_column(ForeignKey("locations.id"), index=True)
-    to_id: Mapped[int] = mapped_column(ForeignKey("locations.id"), index=True)
+    from_id: Mapped[int] = mapped_column(ForeignKey("locations.id_location"), index=True)
+    to_id: Mapped[int] = mapped_column(ForeignKey("locations.id_location"), index=True)
 
     from_location: Mapped["Locations"] = relationship(
         foreign_keys=[from_id],
@@ -57,8 +55,10 @@ class Players(Base):
     protection: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
     attack: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
     balance: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    dungeon: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False) # находится ли в данже
     
     inventory: Mapped[dict] = mapped_column(JSON, default=lambda:DEFAULT_EQUIPMENT.copy())
+    
 # Модель всех предметов
 class Items(Base):
     __tablename__ = "items"
