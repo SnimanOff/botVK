@@ -352,3 +352,45 @@ class UserService:
             await session.refresh(merged)
             logger.debug("Предмет {} использован игроком {}", code, player.vk_id)
             return merged, True
+    
+    @staticmethod
+    async def add_balance(player: Players, amount: int) -> tuple[Players, bool]:
+        """
+        add balance
+        
+        Увеличивает баланс игрока
+        
+        Возвращает модель игрока и результат выполнения
+        """
+        if amount <= 0:
+            logger.debug("Сумма {} не положительна", amount)
+            return player, False
+
+        async with get_session() as session:
+            player.balance += amount
+            merged = await session.merge(player)
+            await session.commit()
+            await session.refresh(merged)
+            logger.debug("Игрок {} получил {} монет, баланс: {}", player.vk_id, amount, merged.balance)
+            return merged, True
+
+    @staticmethod
+    async def remove_balance(player: Players, amount: int) -> tuple[Players, bool]:
+        """
+        remove balance
+        
+        Уменьшает баланс игрока, даже в минус
+        
+        Возвращает модель игрока и результат выполнения
+        """
+        if amount <= 0:
+            logger.debug("Сумма {} не положительна", amount)
+            return player, False
+        
+        async with get_session() as session:
+            player.balance -= amount
+            merged = await session.merge(player)
+            await session.commit()
+            await session.refresh(merged)
+            logger.debug("Игрок {} потратил {} монет, баланс: {}", player.vk_id, amount, merged.balance)
+            return merged, True
