@@ -4,6 +4,7 @@ from database.models import Players, Items, Locations, Edges
 from loguru import logger
 from sqlalchemy.orm.attributes import flag_modified
 from settings import settings
+from effects import EFFECTS
 
 class UserService:
     
@@ -305,3 +306,40 @@ class UserService:
             await session.refresh(player)
             logger.debug("Предмет {} удалён из сумки у игрока {}", removed, player.vk_id)
             return player, True
+        
+    @staticmethod
+    async def use_item(player: Players, index: int) -> tuple[Players, bool]:
+        bag = player.inventory.get("bag", [])
+        
+        if index < 0 or index >= len(bag):
+            logger.debug("Индекс {} вне диапазона у игрока {}", index, player.vk_id)
+            return player, False
+        
+        code = bag[index]
+        item, ok = await UserService.get_item(code)
+        
+        if not ok:
+            logger.error("Предмет {} не найден в БД", code)
+            return player, False
+        
+        effect_name = item.stats.get("effect")
+        value = item.stats.get("value")
+        
+        effect_func = EFFECTS.get(effect_name)
+        if not effect_func:
+            logger.debug("Эффект {} не найден для предмета {}", effect_name, code)
+            return player, False
+        
+        player, ok = await effect_func(player, value)
+        if not ok:
+            return player, False
+        
+        bag.pop(index)
+        player.inventory["bag"] = bag
+        
+        async with get_session() as session:
+            merged = await session.merge(player)
+            await session.commit()
+            await session.refresh(merged)
+            logger.debug("Предмет {} использован игроком {}", code, player.vk_id)
+            return merged, True
