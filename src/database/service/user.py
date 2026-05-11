@@ -375,22 +375,47 @@ class UserService:
             return merged, True
 
     @staticmethod
-    async def remove_balance(player: Players, amount: int) -> tuple[Players, bool]:
-        """
-        remove balance
+    async def buy_item(player: Players, item_code: str) -> tuple[Players, bool]:
+        item, ok = await UserService.get_item(item_code)
         
-        Уменьшает баланс игрока, даже в минус
+        if not ok:
+            logger.error("Предмет {} не найден", item_code)
+            return player, False
         
-        Возвращает модель игрока и результат выполнения
-        """
-        if amount <= 0:
-            logger.debug("Сумма {} не положительна", amount)
+        if not item.slot:
+            bag = player.inventory.get("bag", [])
+            if len(bag) > 20:
+                logger.debug("Сумка полна у игрока {}", player.vk_id)
+                return player, False
+        
+        old_item_code = player.inventory.get(item.slot) if item.slot else None
+        
+        sell_price = 0
+        if old_item_code:
+            old_item, found = await UserService.get_item(old_item_code)
+            if found:
+                sell_price = old_item.price // 2
+        
+        final_price = item.price - sell_price
+        
+        if player.balance < final_price:
+            logger.debug("У игрока {} недостаточно: {} < {}", player.vk_id, player.balance, final_price)
             return player, False
         
         async with get_session() as session:
-            player.balance -= amount
+            player.balance -= final_price
+            
+            if item.slot:
+                player.inventory[item.slot] = item.code
+            else:
+                player.inventory["bag"].append(item.code)
+            
             merged = await session.merge(player)
             await session.commit()
             await session.refresh(merged)
-            logger.debug("Игрок {} потратил {} монет, баланс: {}", player.vk_id, amount, merged.balance)
+            
+            logger.info(
+                "Игрок {} купил {} за {} (продал {} за {})",
+                player.vk_id, item.name, final_price, old_item_code, sell_price
+            )
             return merged, True
