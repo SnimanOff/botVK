@@ -1,6 +1,8 @@
 
 from typing import Dict
-from models import Players, Battles
+from database.models import Players, Battles
+from database.core import get_session
+from service.user import UserService
 
 class BattleService:
     
@@ -18,8 +20,8 @@ class BattleService:
         for slot in ['weapon', 'armor', 'ring']:
             item_code = inventory.get(slot)
             if item_code:
-                item = await BattleService.get_item_by_code(item_code)
-                if item and item.stats:
+                item, success = await UserService.get_item(item_code)
+                if success and item.stats:
                     stats = item.stats
                     if 'damage' in stats:
                         equip_attack += stats['damage']
@@ -48,11 +50,9 @@ class BattleService:
         total_attack = max(total_attack, 0)
         total_protection = max(total_protection, 0)
         total_max_health = max(total_max_health, 1)
-        base_stamina = max(base_stamina, 0)
 
         return {
             "attack": total_attack,
             "protection": total_protection,
             "max_health": total_max_health,
-            "stamina": base_stamina,
         }

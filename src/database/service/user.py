@@ -75,9 +75,9 @@ class UserService:
         Возвращает или изменённое или неизменённый профиль и результат операции
         """
         async with get_session() as session:
-            item = await UserService.get_item(item_code)
+            item, success = await UserService.get_item(item_code)
 
-            if not item:
+            if not success:
                 logger.error("Предмет с кодом {} не найден", item_code)
                 return player, False
             

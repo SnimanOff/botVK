@@ -6,7 +6,12 @@ from pathlib import Path
 from typing import Optional
 import json
 
-DEFAULT_EQUIPMENT = json.loads(Path("default_equipment.json").read_text())
+DEFAULT_EQUIPMENT = {
+    "weapon": None,
+    "armor": None,
+    "ring": None,
+    "bag": []
+}
 
 # Модель локаций
 class Locations(Base):
@@ -79,3 +84,12 @@ class Battles(Base):
     vk_id: Mapped[int] = mapped_column(Integer, index=True)
     state: Mapped[dict] = mapped_column(MutableDict.as_mutable(JSON), nullable=False)
     status: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+class Monsters(Base):
+    __tablename__ = "monsters"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(String(50), nullable=False, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str] = mapped_column(String(500))
+    rarity: Mapped[str] = mapped_column(String(20), default="common")
