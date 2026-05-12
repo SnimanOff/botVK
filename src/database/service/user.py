@@ -4,7 +4,7 @@ from database.models import Players, Items, Locations, Edges, Battles
 from loguru import logger
 from sqlalchemy.orm.attributes import flag_modified
 from settings import settings
-from effects import EFFECTS
+from database.effects import EFFECTS
 
 class UserService:
     
@@ -308,7 +308,6 @@ class UserService:
             return player, True
     
     
-    # check
     @staticmethod
     async def use_item(player: Players, index: int) -> tuple[Players, bool]:
         bag = player.inventory.get("bag", [])
@@ -322,13 +321,16 @@ class UserService:
 
         stats = item.stats   # dict, например {"stat": "attack", "modifier": 10, "duration": 3}
 
-        # Если это бафф (имеет stat и modifier)
+        # Если это бафф
         if "stat" in stats and "modifier" in stats:
             # Находим активный бой
             async with get_session() as session:
                 result = await session.execute(
                     select(Battles)
-                    .where(and_(Battles.vk_id == player.vk_id, Battles.status == True))
+                    .where(and_(Battles.vk_id == player.vk_id,
+                                Battles.status == True
+                                )
+                           )
                     .order_by(Battles.created_at.desc())
                 )
                 battle = result.scalar_one_or_none()
@@ -337,22 +339,19 @@ class UserService:
                     return player, False
 
                 state = battle.state
-                state.setdefault("player_buffs", []).append(stats)   # просто добавляем stats
+                state.setdefault("player_buffs", []).append(stats)
                 flag_modified(battle, "state")
                 await session.commit()
                 logger.debug(f"Бафф {stats} добавлен игроку {player.vk_id}")
 
-            # Удаляем использованный предмет
             bag.pop(index)
             player.inventory["bag"] = bag
-            # Сохраняем игрока
             async with get_session() as session:
                 merged = await session.merge(player)
                 await session.commit()
                 await session.refresh(merged)
                 return merged, True
         else:
-            # Лечение, урон и т.д. – обрабатываем по старой логике (через EFFECTS)
             effect_name = stats.get("effect")
             value = stats.get("value")
             effect_func = EFFECTS.get(effect_name)

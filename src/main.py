@@ -7,11 +7,12 @@ from settings import settings
 from logger import setup_logger
 from database.run import init_db, close_db
 from bot.handlers.start import labeler as start_labeler
-
+from bot.middleware.check_user import UserCheckMiddleware
 
 bot = Bot(token=settings.VK_TOKEN)
 bot.labeler.load(start_labeler)
 
+bot.labeler.message_view.register_middleware(UserCheckMiddleware)
 
 def main() -> None:
     setup_logger()
