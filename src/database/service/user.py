@@ -147,21 +147,35 @@ class UserService:
         
         Возвращает модель игрока и результат операции
         """
-        location = player.location_id
         async with get_session() as session:
-            paths, ok = await UserService.get_paths(location)
+            result = await session.execute(
+                select(Players).where(Players.id == player.id)
+            )
+            fresh_player = result.scalar_one()
+            current_location = fresh_player.location_id
+            
+            paths, ok = await UserService.get_paths(current_location)
             if not ok:
-                return player, False
+                return fresh_player, False
             
             available_ids = [loc.id_location for loc in paths]
             
             if move not in available_ids:
-                return player, False
+                logger.warning(
+                    "Игрок {}: ход {} недоступен из локации {}. Доступны: {}",
+                    fresh_player.vk_id, move, current_location, available_ids
+                )
+                return fresh_player, False
             
-            player.location_id = move
+            fresh_player.location_id = move
             await session.commit()
-            await session.refresh(player)
-            return player, True
+            await session.refresh(fresh_player)
+            
+            logger.debug(
+                "Игрок {}: {} → {}",
+                fresh_player.vk_id, current_location, move
+            )
+            return fresh_player, True
         
     @staticmethod
     async def Go_items(player: Players, item_type: str) -> tuple[list[str], bool]:

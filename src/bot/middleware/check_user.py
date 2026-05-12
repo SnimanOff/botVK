@@ -6,7 +6,7 @@ from loguru import logger
 
 class UserCheckMiddleware(BaseMiddleware[Message]):
     """
-    Создаёт профиль игрока, если его нет, срабатывает перед каждым сообщением
+    Создаёт профиль игрока если его нет, срабатывает перед каждым сообщением
     """
     
     async def pre(self):

@@ -15,17 +15,13 @@ async def add_items(items_directory: str = "items") -> bool:
     
     if not ITEMS_DIR.exists():
         logger.error("Папка с предметами не найдена")
-        raise FileNotFoundError(f"Папка с предметами не найдена по дирректории: {ITEMS_DIR}")
+        raise FileNotFoundError(f"Папка с предметами не найдена: {ITEMS_DIR}")
     
-    files = sorted(ITEMS_DIR.glob("*.json"))
+    files = list(ITEMS_DIR.glob("*.json"))
     
     if not files: 
-        logger.error("JSON файлы в папке {} не найдены", ITEMS_DIR)
-        raise FileNotFoundError(f"В папке {ITEMS_DIR} не найдены файлы типа JSON")
-    else:
-        logger.debug("Найдено {} JSON файлов в дирректории {}", len(files), ITEMS_DIR)
-        for file in files:
-            logger.debug("  {}", file.name)
+        logger.error("JSON файлы не найдены")
+        raise FileNotFoundError(f"В папке {ITEMS_DIR} нет JSON файлов")
     
     all_data = []
     for file in files: 
@@ -34,7 +30,7 @@ async def add_items(items_directory: str = "items") -> bool:
             all_data.append(data)
             logger.debug("Загружен: {}", file.name)
         except json.JSONDecodeError as error:
-            logger.error("Ошибка {} при парсинге файла {}", error, file.name)
+            logger.error("Ошибка в {}: {}", file.name, error)
             raise
     
     count_added = 0
@@ -44,27 +40,29 @@ async def add_items(items_directory: str = "items") -> bool:
             code = data.get("code")
             
             result = await session.execute(
-                    select(Items)
-                    .where(Items.code == code)
-                )
-            
-            exiting = result.scalar_one_or_none()
-            
-            if not exiting:
-                item = Items(
-                code=code,
-                name=data.get("name", code),
-                type=data.get("type"),
-                slot=data.get("slot"),
-                stats=data.get("stats"),
-                price=data.get("price"),
+                select(Items)
+                .where(Items.code == code)
             )
             
-            session.add(item)
-            count_added+=1
-            logger.debug("Записан отсутствующий ранее предмет: {}", item.code)
+            existing = result.scalar_one_or_none()
+            
+            if not existing:
+                item = Items(
+                    code=code,
+                    name=data.get("name", code),
+                    type=data.get("type"),
+                    slot=data.get("slot"),
+                    stats=data.get("stats"),
+                    price=data.get("price"),
+                )
+                
+                session.add(item)
+                count_added += 1
+                logger.debug("Записан отсутствующий ранее предмет: {}", item.code)
+            else:
+                logger.debug("Предмет {} уже существует, пропускаем", code)
             
         await session.commit()
-        logger.info("Загрузка предметов завершена. Всего загружено: {}", count_added)
+        logger.info("Загрузка предметов завершена. Всего добавлено: {}", count_added)
         
         return True
