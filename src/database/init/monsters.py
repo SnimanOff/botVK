@@ -8,7 +8,7 @@ from loguru import logger
 
 async def add_monsters(monsters_directory: str = "monsters") -> bool:
     
-    BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
+    BASE_DIR = Path(__file__).resolve().parent.parent.parent
     MONSTERS_DIR = BASE_DIR / monsters_directory
     
     logger.debug("Путь к монстрам: {}", MONSTERS_DIR)

@@ -19,7 +19,7 @@ def main() -> None:
 
     try:
         logger.info("Запуск приложения...")
-        asyncio.run(init_db())
+        asyncio.run(init_db(load_data=True))
 
         logger.info("Бот запущен")
         bot.run_forever()

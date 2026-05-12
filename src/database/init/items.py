@@ -8,7 +8,7 @@ from loguru import logger
 
 async def add_items(items_directory: str = "items") -> bool:
     
-    BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
+    BASE_DIR = Path(__file__).resolve().parent.parent.parent
     ITEMS_DIR = BASE_DIR / items_directory
     
     logger.debug("Путь к предметам: {}", ITEMS_DIR)
