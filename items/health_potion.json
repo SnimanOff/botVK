@@ -1,8 +1,0 @@
-{
-  "code": "health_potion",
-  "name": "Health Potion",
-  "type": "else",
-  "slot": null,
-  "stats": { "heal": 50 },
-  "price": 30
-}

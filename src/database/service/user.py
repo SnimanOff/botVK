@@ -37,7 +37,7 @@ class UserService:
             await session.commit()
             await session.refresh(player)
             
-            logger.debug("Создан игрок id={}, vk_id={}", player.id, vk_id)
+            logger.info("Создан новый игрок id={}, vk_id={}", player.id, vk_id)
             return player
         
     @staticmethod
