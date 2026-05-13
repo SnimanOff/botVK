@@ -13,6 +13,11 @@ from bot.handlers.features.shop import (
     shop_confirm,
     back_to_location,
 )
+from bot.handlers.features.dungeon import (
+    enter_dungeon,
+    dungeon_move,
+    combat_action,
+)
 
 labeler = BotLabeler()
 
@@ -35,6 +40,8 @@ async def router(event: GroupTypes.MessageEvent):
             await shop_open(event, player)
         elif feature_id == "back_to_location":
             await back_to_location(event, player)
+        elif feature_id == "enter_dungeon":
+            await enter_dungeon(event, player)
         else:
             logger.warning("Неизвестная фича: {}", feature_id)
             
@@ -46,6 +53,12 @@ async def router(event: GroupTypes.MessageEvent):
         
     elif cmd == "shop_confirm":
         await shop_confirm(event, player, payload)
+        
+    elif cmd == "dungeon_move":
+        await dungeon_move(event, player, payload)
+        
+    elif cmd == "combat_action":
+        await combat_action(event, player, payload)
         
     else:
         logger.warning("Неизвестная команда: {}", cmd)

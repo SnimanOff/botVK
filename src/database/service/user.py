@@ -469,4 +469,40 @@ class UserService:
             )
             return merged, True
     
-    
+    @staticmethod
+    async def get_total_stats(player: Players) -> dict:
+        stats = {
+            "health": player.health,
+            "max_health": player.max_health,
+            "attack": player.attack,
+            "protection": player.protection,
+        }
+        
+        for slot in ["weapon", "armor", "ring"]:
+            item_code = player.inventory.get(slot)
+            if item_code:
+                item, ok = await UserService.get_item(item_code)
+                if ok and item:
+                    for stat, value in (item.stats or {}).items():
+                        if stat in stats:
+                            stats[stat] += value
+        
+        return stats
+
+    @staticmethod
+    async def get_equipment_value(player: Players) -> int:
+        total = 0
+        
+        for slot in ["weapon", "armor", "ring"]:
+            item_code = player.inventory.get(slot)
+            if item_code:
+                item, ok = await UserService.get_item(item_code)
+                if ok and item:
+                    total += item.price
+        
+        for bag_item in player.inventory.get("bag", []):
+            item, ok = await UserService.get_item(bag_item)
+            if ok and item:
+                total += item.price
+        
+        return total

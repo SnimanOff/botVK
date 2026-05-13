@@ -1,11 +1,5 @@
-from sqlalchemy import select, and_
-from database.core import get_session
 from database.service.user import UserService
-from database.models import Players, Items, Locations, Edges, Battles
-from loguru import logger
-from sqlalchemy.orm.attributes import flag_modified
-from settings import settings
-from database.effects import EFFECTS
+from database.models import Players
 
 class ShopService:
     

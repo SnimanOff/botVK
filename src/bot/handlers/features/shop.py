@@ -85,7 +85,7 @@ async def shop_open(event, player):
     )
     logger.debug("Вызвано открытие магазина пользователем: {}", event.object.peer_id)
     await snackbar(event, "🏪 Магазин открыт")
-    await safe_delete(event)
+    await delete(event)
     
 
 
@@ -115,7 +115,7 @@ async def shop_category(event, player, payload):
     
     logger.debug("Пользователь: {} успешно открыл категорию: {}", event.object.peer_id, category_name)
     
-    await safe_delete(event)
+    await delete(event)
     await snackbar(event, f"📂 {category_name}")
 
 
@@ -145,7 +145,7 @@ async def shop_buy(event, player, payload):
     
     logger.debug("Пользователь: {} начал процесс покупки предмета: {}", event.object.peer_id, item_code)
     
-    await safe_delete(event)
+    await delete(event)
 
 
 async def shop_confirm(event, player, payload):
@@ -185,11 +185,11 @@ async def back_to_location(event, player):
     
     logger.debug("Пользователь: {} вернулся к локациям", event.object.peer_id)
     
-    await safe_delete(event)
+    await delete(event)
     await snackbar(event, "🔙 Возврат к локации")
 
 
-async def safe_delete(event):
+async def delete(event):
     try:
         await event.ctx_api.messages.delete(
             peer_id=event.object.peer_id,

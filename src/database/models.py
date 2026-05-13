@@ -1,5 +1,5 @@
 from sqlalchemy import String, Integer, ForeignKey, JSON, Boolean
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from sqlalchemy.ext.mutable import MutableDict
 from database.core import Base
 from pathlib import Path
@@ -62,9 +62,12 @@ class Players(Base):
     protection: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
     attack: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
     balance: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    dungeon: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False) # находится ли в данже
     
     inventory: Mapped[dict] = mapped_column(MutableDict.as_mutable(JSON), default=lambda: DEFAULT_EQUIPMENT.copy())
+    
+    dungeon_run: Mapped[Optional["Dungeons"]] = relationship(
+        "Dungeons", back_populates="player", uselist=False
+    )
     
 # Модель всех предметов
 class Items(Base):
@@ -94,3 +97,32 @@ class Monsters(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str] = mapped_column(String(500))
     rarity: Mapped[str] = mapped_column(String(20), default="common")
+    
+class Dungeons(Base):
+    __tablename__ = "dungeons"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    vk_id: Mapped[int] = mapped_column(Integer, ForeignKey("players.vk_id"), unique=True, index=True)
+    
+    map_data: Mapped[dict] = mapped_column(MutableDict.as_mutable(JSON), nullable=False)
+    pos_x: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    pos_y: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    rooms_cleared: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    
+    player: Mapped[Optional["Players"]] = relationship("Players", back_populates="dungeon_run")
+    
+    @validates('pos_x')
+    def validate_pos_x(self, key, value):
+        if not 1 <= value <= 7:
+            raise ValueError(f"pos_x must be 1-7, got {value}")
+        return value
+    
+    @validates('pos_y')
+    def validate_pos_y(self, key, value):
+        if not 1 <= value <= 3:
+            raise ValueError(f"pos_y must be 1-3, got {value}")
+        return value
+    
+    def __repr__(self):
+        return f"<Dungeons(vk_id={self.vk_id}, pos=({self.pos_x},{self.pos_y}), active={self.active})>"

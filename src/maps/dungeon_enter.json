@@ -7,5 +7,7 @@
   "edges": [
     { "to_id": 2 }
   ],
-  "features": {}
+  "features": {
+    "enter_dungeon": "Вход в данж"
+  }
 }
