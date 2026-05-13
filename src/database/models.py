@@ -17,9 +17,10 @@ DEFAULT_EQUIPMENT = {
 class Locations(Base):
     __tablename__ = "locations"
     
-    id_location: Mapped[int] = mapped_column(Integer, primary_key=True)  # PK = твой ID из JSON
+    id_location: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(100))
     description: Mapped[str] = mapped_column(String(500))
+    features: Mapped[dict] = mapped_column(MutableDict.as_mutable(JSON), default=dict)
     
     outgoing_edges: Mapped[list["Edges"]] = relationship(
         foreign_keys="Edges.from_id",

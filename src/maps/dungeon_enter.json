@@ -6,5 +6,6 @@
   },
   "edges": [
     { "to_id": 2 }
-  ]
+  ],
+  "features": {}
 }

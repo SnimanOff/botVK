@@ -215,7 +215,27 @@ class UserService:
             
             logger.debug("Найдено {} предметов типа {} для игрока {}", len(available), item_type, player.vk_id)
             return available, True
+    
+    @staticmethod
+    async def get_location(location_id: int) -> tuple[Locations, bool]:
+        """
+        get location
         
+        Получает локацию по id
+        
+        Возвращает локацию и результат операции
+        """
+        async with get_session() as session:
+            try:
+                result = await session.execute(
+                    select(Locations)
+                    .where(Locations.id_location == location_id)
+                )
+                return result.scalar_one_or_none(), True
+            
+            except Exception as error:
+                logger.debug("Получение локации по id={} не удалось из-за ошибки: {}", location_id, error)
+                
     @staticmethod
     async def enter_dungeon(player: Players) -> tuple[Players, bool]:
         """

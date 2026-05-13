@@ -23,6 +23,20 @@ async def build_move_keyboard(location_id: int):
             )
             keyboard.row()
     
+    # дополнительные кнопки 
+    location, ok = await UserService.get_location(location_id)
+    if ok:
+        if location and location.features:
+            for feature_id, label in location.features.items():
+                keyboard.add(
+                    Callback(
+                        label,
+                        payload={"cmd": "feature", "id": feature_id}
+                    ),
+                    color=KeyboardButtonColor.SECONDARY
+                )
+                keyboard.row()
+    
     return keyboard.get_json()
 
 

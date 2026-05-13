@@ -42,11 +42,14 @@ async def add_locations(maps_directory: str = "maps") -> bool:
         for data in all_data:
             loc_data = data["location"]
             ext_id = int(loc_data["id"])
+            features = data.get("features", {})
+            logger.debug("Локация {}: features={}", ext_id, features)
             
             location = Locations(
                 id_location=ext_id,
                 name=loc_data["name"],
                 description=loc_data["description"],
+                features=features,
             )
             session.add(location)
             await session.flush()
