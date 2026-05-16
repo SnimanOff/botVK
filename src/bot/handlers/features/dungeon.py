@@ -11,8 +11,7 @@ async def enter_dungeon(event, player):
         return
     
     result = await UserService.enter_dungeon_room(dungeon, player)
-    exits, _ = await UserService.get_available_exits(dungeon)
-    keyboard = build_navigation_kb(exits)
+    keyboard = await build_dungeon_room_kb(dungeon, {"type": result.get("type")})
     
     await event.ctx_api.messages.send(
         peer_id=event.object.peer_id,
@@ -20,7 +19,6 @@ async def enter_dungeon(event, player):
         keyboard=keyboard,
         random_id=0,
     )
-    
     await delete(event)
 
 
@@ -39,7 +37,6 @@ async def dungeon_move(event, player, payload):
         return
     
     result = await UserService.enter_dungeon_room(dungeon, player)
-    
     room_type = result.get("type")
     
     if room_type == "exit":
@@ -54,13 +51,7 @@ async def dungeon_move(event, player, payload):
         await delete(event)
         return
     
-    if room_type in ("start", "shrine", "treasure"):
-        exits, _ = await UserService.get_available_exits(dungeon)
-        keyboard = build_navigation_kb(exits)
-    elif room_type in ("combat", "boss"):
-        keyboard = build_combat_kb(result.get("battle_id"))
-    else:
-        keyboard = None
+    keyboard = await build_dungeon_room_kb(dungeon, {"type": room_type})
     
     await event.ctx_api.messages.send(
         peer_id=event.object.peer_id,
@@ -68,89 +59,147 @@ async def dungeon_move(event, player, payload):
         keyboard=keyboard,
         random_id=0,
     )
+    await delete(event)
+
+
+async def treasure_open(event, player, payload):
+    dungeon, ok = await UserService.get_active_dungeon(player.vk_id)
+    if not ok:
+        await snackbar(event, "Нет активного данжа")
+        return
     
+    key = f"{dungeon.pos_x},{dungeon.pos_y}"
+    room = dungeon.map_data.get("rooms", {}).get(key, {})
+    if room.get("cleared"):
+        await snackbar(event, "Сундук уже открыт")
+        return
+    
+    equipment = await UserService.get_equipment_price(player)
+    networth = player.balance + equipment
+    bonus = int(networth * 0.15)
+    
+    await UserService.add_balance(player, bonus)
+    await UserService.mark_room_cleared(dungeon)
+    
+    result = await UserService.enter_dungeon_room(dungeon, player)
+    keyboard = await build_dungeon_room_kb(dungeon, {"type": result.get("type")})
+    
+    await event.ctx_api.messages.send(
+        peer_id=event.object.peer_id,
+        message=f"{result['message']}\n\nСундук открыт! +{bonus} монет",
+        keyboard=keyboard,
+        random_id=0,
+    )
+    await delete(event)
+
+
+async def shrine_use(event, player, payload):
+    dungeon, ok = await UserService.get_active_dungeon(player.vk_id)
+    if not ok:
+        await snackbar(event, "Нет активного данжа")
+        return
+    
+    key = f"{dungeon.pos_x},{dungeon.pos_y}"
+    room = dungeon.map_data.get("rooms", {}).get(key, {})
+    if room.get("cleared"):
+        await snackbar(event, "Алтарь уже использован")
+        return
+    
+    await UserService.heal_player(player)
+    
+    buff = {"stat": "attack", "modifier": 0.25, "duration": 9999, "source": "shrine"}
+    await UserService.add_dungeon_buff(dungeon, buff)
+    await UserService.mark_room_cleared(dungeon)
+    
+    result = await UserService.enter_dungeon_room(dungeon, player)
+    keyboard = await build_dungeon_room_kb(dungeon, {"type": result.get("type")})
+    
+    await event.ctx_api.messages.send(
+        peer_id=event.object.peer_id,
+        message=f"{result['message']}\n\nАлтарь исцелил вас и даровал +25% урона",
+        keyboard=keyboard,
+        random_id=0,
+    )
     await delete(event)
 
 
 async def combat_action(event, player, payload):
     battle_id = payload.get("battle_id")
-    action = payload.get("action")  # "attack", "defend", "potion"
+    action = payload.get("action")
     
     logger.debug("Боевое действие: {}, пользователь: {}", action, player.vk_id)
     
-    # пока просто отвечаем
     if action == "attack":
         await snackbar(event, "Удар нанесён")
     elif action == "defend":
         await snackbar(event, "Защитная стойка")
     elif action == "potion":
         await snackbar(event, "Зелье выпито")
-    
-    # TODO: полная логика боя позже
-
-def build_navigation_kb(exits: list[dict]) -> str:
-    keyboard = Keyboard(inline=True)
-    
-    for exit_data in exits:
-        x, y = exit_data["x"], exit_data["y"]
-        cleared = "(пройдено)" if exit_data["cleared"] else ""
         
-        keyboard.add(
-            Callback(
-                f"({x},{y}) {cleared}",
-                payload={"cmd": "dungeon_move", "x": x, "y": y}
-            ),
-            color=KeyboardButtonColor.PRIMARY
-        )
-        keyboard.row()
-    
-    return keyboard.get_json()
-
-
-def build_combat_kb(battle_id: int) -> str:
-    keyboard = Keyboard(inline=True)
-    
-    keyboard.add(
-        Callback(
-            "Атаковать",
-            payload={"cmd": "combat_action", "battle_id": battle_id, "action": "attack"}
-        ),
-        color=KeyboardButtonColor.POSITIVE
-    )
-    keyboard.add(
-        Callback(
-            "Блок",
-            payload={"cmd": "combat_action", "battle_id": battle_id, "action": "defend"}
-        ),
-        color=KeyboardButtonColor.SECONDARY
-    )
-    keyboard.row()
-    
-    keyboard.add(
-        Callback(
-            "Зелье",
-            payload={"cmd": "combat_action", "battle_id": battle_id, "action": "potion"}
-        ),
-        color=KeyboardButtonColor.PRIMARY
-    )
-    
-    return keyboard.get_json()
+        # TODO: Логика боя
+        
+    await delete(event)
 
 
 async def build_dungeon_room_kb(dungeon, room_data):
     room_type = room_data.get("type")
+    exits, _ = await UserService.get_available_exits(dungeon)
     
-    if room_type in ("start", "shrine", "treasure", "exit"):
-        exits, _ = await UserService.get_available_exits(dungeon)
-        return build_navigation_kb(exits)
-    elif room_type in ("combat", "boss"):
-            battle, ok = await UserService.get_active_battle(dungeon.vk_id)
-            battle_id = battle.id if ok else 0
-            return build_combat_kb(battle_id)
-
+    keyboard = Keyboard(inline=True)
     
-    return Keyboard(inline=True).get_json()
-
+    key = f"{dungeon.pos_x},{dungeon.pos_y}"
+    current_room = dungeon.map_data.get("rooms", {}).get(key, {})
+    is_cleared = current_room.get("cleared", False)
+    
+    if room_type == "treasure" and not is_cleared:
+        keyboard.add(
+            Callback("Открыть", payload={"cmd": "treasure_open"}),
+            color=KeyboardButtonColor.POSITIVE
+        )
+        keyboard.row()
+        return keyboard.get_json()
+    
+    elif room_type == "shrine" and not is_cleared:
+        keyboard.add(
+            Callback("Использовать", payload={"cmd": "shrine_use"}),
+            color=KeyboardButtonColor.POSITIVE
+        )
+        keyboard.row()
+        return keyboard.get_json()
+    
+    elif room_type in ("combat", "boss") and not is_cleared:
+        battle, ok = await UserService.get_active_battle(dungeon.vk_id)
+        battle_id = battle.id if ok else 0
+        keyboard.add(
+            Callback("Атаковать", payload={"cmd": "combat_action", "battle_id": battle_id, "action": "attack"}),
+            color=KeyboardButtonColor.POSITIVE
+        )
+        keyboard.add(
+            Callback("Блок", payload={"cmd": "combat_action", "battle_id": battle_id, "action": "defend"}),
+            color=KeyboardButtonColor.SECONDARY
+        )
+        keyboard.row()
+        keyboard.add(
+            Callback("Зелье", payload={"cmd": "combat_action", "battle_id": battle_id, "action": "potion"}),
+            color=KeyboardButtonColor.PRIMARY
+        )
+        keyboard.row()
+        return keyboard.get_json()
+    
+    if room_type != "exit":
+        for exit_data in exits:
+            x, y = exit_data["x"], exit_data["y"]
+            cleared = "(✓)" if exit_data["cleared"] else ""
+            keyboard.add(
+                Callback(
+                    f"Комната {x} Этажа {y} {cleared}",
+                    payload={"cmd": "dungeon_move", "x": x, "y": y}
+                ),
+                color=KeyboardButtonColor.PRIMARY
+            )
+            keyboard.row()
+    
+    return keyboard.get_json()
 
 
 async def snackbar(event, text: str):

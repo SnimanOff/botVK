@@ -1,9 +1,9 @@
-from sqlalchemy import String, Integer, ForeignKey, JSON, Boolean
+from sqlalchemy import String, Integer, ForeignKey, JSON, Boolean, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from sqlalchemy.ext.mutable import MutableDict
 from database.core import Base
 from typing import Optional
-import datetime
+from datetime import *
 
 DEFAULT_EQUIPMENT = {
     "weapon": None,

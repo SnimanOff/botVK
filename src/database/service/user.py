@@ -1,6 +1,6 @@
 from sqlalchemy import select, and_
 from database.core import get_session
-from database.models import Players, Items, Locations, Edges, Battles, Dungeons
+from database.models import Players, Items, Locations, Edges, Battles, Dungeons, Monsters
 from loguru import logger
 from sqlalchemy.orm.attributes import flag_modified
 from settings import settings
@@ -545,29 +545,40 @@ class UserService:
     @staticmethod
     def _generate_map() -> dict:
         rooms = {}
-        for y in range(1, 4):
-            for x in range(1, 8):
-                rooms[f"{x},{y}"] = {
-                    "type": "combat",
-                    "name": f"Зал {x}-{y}",
-                    "description": "Тусклый факел освещает каменные стены.",
-                    "cleared": False,
-                }
-
-        rooms["1,1"].update({"type": "start",   "name": "Вход",        "description": "Тяжёлые ворота за вами захлопнулись."})
-        rooms["7,3"].update({"type": "exit",    "name": "Выход",       "description": "Лучи света пробиваются сквозь трещины."})
-
-        # Немного случайных сокровищниц/алтарей
-        candidates = [(x, y) for x in range(2, 7) for y in range(1, 4)
-                      if f"{x},{y}" not in ("3,1", "5,2", "7,2", "7,3")]
-        for (x, y) in random.sample(candidates, min(3, len(candidates))):
+        for x in range(1, 8):
+            rooms[f"{x},1"] = {
+                "type": "combat",
+                "name": f"Комната {x}",
+                "description": "Тусклый факел освещает каменные стены. Воздух пахнет сыростью и страхом.",
+                "cleared": False,
+            }
+        rooms["1,1"].update({
+            "type": "start",
+            "name": "Вход",
+            "description": "Тяжёлые ворота захлопнулись за спиной. Перед тобой тёмный коридор.",
+        })
+        rooms["7,1"].update({
+            "type": "exit",
+            "name": "Выход",
+            "description": "Лучи света пробиваются сквозь трещины. Свобода близко.",
+        })
+        
+        candidates = [x for x in range(2, 7)]
+        for x in random.sample(candidates, min(3, len(candidates))):
             kind = random.choice(["treasure", "shrine"])
-            rooms[f"{x},{y}"].update({
-                "type": kind,
-                "name": "Тайник" if kind == "treasure" else "Алтарь",
-                "description": "Что-то интересное.",
-            })
-        return rooms
+            if kind == "treasure":
+                rooms[f"{x},1"].update({
+                    "type": "treasure",
+                    "name": f"Комната {x}",
+                    "description": "В углу поблескивает что-то золотое. Сундук стоит на каменном постаменте.",
+                })
+            else:
+                rooms[f"{x},1"].update({
+                    "type": "shrine",
+                    "name": f"Комната {x}",
+                    "description": "Древний алтарь пульсирует едва заметным голубым светом.",
+                })
+        return {"rooms": rooms}
 
     @staticmethod
     async def get_active_dungeon(vk_id: int) -> tuple[Dungeons | None, bool]:
@@ -590,9 +601,19 @@ class UserService:
                 await session.delete(old_dungeon)
                 await session.flush()
 
+            map_data = UserService._generate_map()
+            rooms = map_data["rooms"]
+            
+            for key, room in rooms.items():
+                if room["type"] == "combat":
+                    monster, ok = await UserService.get_random_monster()
+                    if ok:
+                        room["monster_code"] = monster.code
+                        room["monster_name"] = monster.name
+
             dungeon = Dungeons(
                 vk_id=player.vk_id,
-                map_data={"rooms": UserService._generate_map()},
+                map_data=map_data,
                 pos_x=1,
                 pos_y=1,
                 active=True,
@@ -612,45 +633,52 @@ class UserService:
 
         msg = f"📍 {room['name']}\n{room['description']}"
         if room["type"] in ("combat", "boss") and not room.get("cleared"):
-            msg += "\n\n⚔️ Враг готов к бою!"
-            return {"message": msg, "type": room["type"], "battle_id": 0}
+            monster_name = room.get("monster_name", "Неизвестный враг")
+            msg += f"\n\n⚔️ {monster_name} готов к бою!"
+            return {"message": msg, "type": room["type"], "battle_id": 0, "monster_name": monster_name}
 
         return {"message": msg, "type": room["type"]}
 
     @staticmethod
     async def get_available_exits(dungeon: Dungeons) -> tuple[list[dict], bool]:
         rooms = dungeon.map_data.get("rooms", {})
-        cx, cy = dungeon.pos_x, dungeon.pos_y
+        cx = dungeon.pos_x
         exits = []
-        for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0)):
-            nx, ny = cx + dx, cy + dy
-            if 1 <= nx <= 7 and 1 <= ny <= 3:
-                key = f"{nx},{ny}"
-                if key in rooms:
-                    r = rooms[key]
-                    exits.append({
-                        "x": nx, "y": ny,
-                        "type": r["type"],
-                        "name": r["name"],
-                        "cleared": r.get("cleared", False),
-                    })
+        for dx in (-1, 1):
+            nx = cx + dx
+            key = f"{nx},1"
+            if key in rooms:
+                r = rooms[key]
+                exits.append({
+                    "x": nx, "y": 1,
+                    "type": r["type"],
+                    "name": r["name"],
+                    "cleared": r.get("cleared", False),
+                })
         return exits, True
 
     @staticmethod
+    async def get_random_monster() -> tuple[Monsters | None, bool]:
+        async with get_session() as session:
+            result = await session.execute(select(Monsters))
+            monsters = result.scalars().all()
+            if not monsters:
+                return None, False
+            return random.choice(monsters), True
+
+    @staticmethod
     async def move_in_dungeon(dungeon: Dungeons, new_x: int, new_y: int) -> tuple[Dungeons, bool, str]:
-        if not (1 <= new_x <= 7 and 1 <= new_y <= 3):
-            return dungeon, False, "Координаты вне карты."
-
-        if abs(new_x - dungeon.pos_x) + abs(new_y - dungeon.pos_y) != 1:
-            return dungeon, False, "Можно шагать только на соседнюю клетку."
-
-        key = f"{new_x},{new_y}"
+        if new_y != 1:
+            return dungeon, False, "Только прямо."
+        if not (1 <= new_x <= 7):
+            return dungeon, False, "Конец коридора."
+        if abs(new_x - dungeon.pos_x) != 1:
+            return dungeon, False, "Только соседняя комната."
+        key = f"{new_x},1"
         if key not in dungeon.map_data.get("rooms", {}):
             return dungeon, False, "Туда нет пути."
-
         dungeon.pos_x = new_x
-        dungeon.pos_y = new_y
-
+        dungeon.pos_y = 1
         async with get_session() as session:
             merged = await session.merge(dungeon)
             await session.commit()
@@ -696,3 +724,31 @@ class UserService:
             )
             battle = result.scalar_one_or_none()
             return battle, battle is not None
+        
+    @staticmethod
+    async def mark_room_cleared(dungeon: Dungeons):
+        key = f"{dungeon.pos_x},{dungeon.pos_y}"
+        rooms = dungeon.map_data.get("rooms", {})
+        if key in rooms:
+            rooms[key]["cleared"] = True
+            async with get_session() as session:
+                merged = await session.merge(dungeon)
+                flag_modified(merged, "map_data")
+                await session.commit()
+
+    @staticmethod
+    async def heal_player(player: Players) -> tuple[Players, bool]:
+        async with get_session() as session:
+            player.health = player.max_health
+            merged = await session.merge(player)
+            await session.commit()
+            await session.refresh(merged)
+            return merged, True
+
+    @staticmethod
+    async def add_dungeon_buff(dungeon: Dungeons, buff: dict):
+        dungeon.map_data.setdefault("buffs", []).append(buff)
+        async with get_session() as session:
+            merged = await session.merge(dungeon)
+            flag_modified(merged, "map_data")
+            await session.commit()

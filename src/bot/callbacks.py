@@ -57,6 +57,14 @@ async def router(event: GroupTypes.MessageEvent):
         
     elif cmd == "combat_action":
         await combat_action(event, player, payload)
+    
+    elif cmd == "treasure_open":
+        from bot.handlers.features.dungeon import treasure_open
+        await treasure_open(event, player, payload)
         
+    elif cmd == "shrine_use":
+        from bot.handlers.features.dungeon import shrine_use
+        await shrine_use(event, player, payload)
+    
     else:
         logger.warning("Неизвестная команда: {}", cmd)
