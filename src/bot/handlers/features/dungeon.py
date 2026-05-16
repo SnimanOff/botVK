@@ -137,8 +137,6 @@ async def combat_action(event, player, payload):
         await snackbar(event, "Зелье выпито")
         
         # TODO: Логика боя
-        
-    await delete(event)
 
 
 async def build_dungeon_room_kb(dungeon, room_data):
