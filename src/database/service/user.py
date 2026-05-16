@@ -1,10 +1,11 @@
 from sqlalchemy import select, and_
 from database.core import get_session
-from database.models import Players, Items, Locations, Edges, Battles
+from database.models import Players, Items, Locations, Edges, Battles, Dungeons
 from loguru import logger
 from sqlalchemy.orm.attributes import flag_modified
 from settings import settings
 from database.effects import EFFECTS
+import random
 
 class UserService:
     
@@ -245,23 +246,24 @@ class UserService:
         
         Возвращает модель игрока и результат операции
         """
-        in_dungeon = player.dungeon
+        id = player.vk_id
         player_location = player.location_id
         enter_location = settings.DUNGEON_LOCATION
-        
-        if in_dungeon:
-            logger.warning("Игрок {} попытался войти в данж, хотя уже в нём", player.vk_id)
+
+        existing, ok = await UserService.get_active_dungeon(player.id)
+        if ok:
+            logger.warning("Игрок {} уже в активном данже", player.id)
             return player, False
 
         if player_location != enter_location:
-            logger.warning("Игрок {} попытался войти в данж, хотя не находится на нужной клетке", player.vk_id)
+            logger.warning("Игрок {} не на входе в данж", player.id)
             return player, False
 
-        async with get_session() as session:
-            player.dungeon = True
-            await session.commit()
-            await session.refresh(player)
-            return player, True
+        dungeon, ok = await UserService.create_dungeon(player)
+        if not ok:
+            return player, False
+
+        return player, True
         
     @staticmethod
     async def exit_dungeon(player: Players) -> tuple[Players, bool]:
@@ -272,19 +274,21 @@ class UserService:
         
         Возвращает модель игрока и результат операции
         """
-        in_dungeon = player.dungeon
-        exit_location = settings.DUNGEON_LOCATION
-        
-        if not in_dungeon:
-            logger.warning("Игрок {} попытался выйти из данжа, хотя там не находится", player.vk_id)
+        id = player.vk_id
+        dungeon, ok = await UserService.get_active_dungeon(player.id)
+        if not ok:
+            logger.warning("Игрок {} не в данже", player.id)
             return player, False
-        
+
         async with get_session() as session:
-            player.dungeon = False
-            player.location_id = exit_location
+            dungeon.active = False
             await session.commit()
-            await session.refresh(player)
-            return player, True
+
+            player.location_id = settings.DUNGEON_LOCATION
+            merged = await session.merge(player)
+            await session.commit()
+            await session.refresh(merged)
+            return merged, True
     
     @staticmethod
     async def remove_item(player: Players, slot: str) -> tuple[Players, bool]:
@@ -537,3 +541,147 @@ class UserService:
                 total += item.price
         
         return total
+    
+    @staticmethod
+    def _generate_map() -> dict:
+        rooms = {}
+        for y in range(1, 4):
+            for x in range(1, 8):
+                rooms[f"{x},{y}"] = {
+                    "type": "combat",
+                    "name": f"Зал {x}-{y}",
+                    "description": "Тусклый факел освещает каменные стены.",
+                    "cleared": False,
+                }
+
+        rooms["1,1"].update({"type": "start",   "name": "Вход",        "description": "Тяжёлые ворота за вами захлопнулись."})
+        rooms["7,3"].update({"type": "exit",    "name": "Выход",       "description": "Лучи света пробиваются сквозь трещины."})
+
+        # Немного случайных сокровищниц/алтарей
+        candidates = [(x, y) for x in range(2, 7) for y in range(1, 4)
+                      if f"{x},{y}" not in ("3,1", "5,2", "7,2", "7,3")]
+        for (x, y) in random.sample(candidates, min(3, len(candidates))):
+            kind = random.choice(["treasure", "shrine"])
+            rooms[f"{x},{y}"].update({
+                "type": kind,
+                "name": "Тайник" if kind == "treasure" else "Алтарь",
+                "description": "Что-то интересное.",
+            })
+        return rooms
+
+    @staticmethod
+    async def get_active_dungeon(vk_id: int) -> tuple[Dungeons | None, bool]:
+        async with get_session() as session:
+            result = await session.execute(
+                select(Dungeons)
+                .where(Dungeons.vk_id == vk_id, Dungeons.active == True)
+            )
+            d = result.scalar_one_or_none()
+            return d, d is not None
+
+    @staticmethod
+    async def create_dungeon(player: Players) -> tuple[Dungeons | None, bool]:
+        async with get_session() as session:
+            old = await session.execute(
+                select(Dungeons).where(Dungeons.vk_id == player.vk_id)
+            )
+            old_dungeon = old.scalar_one_or_none()
+            if old_dungeon:
+                await session.delete(old_dungeon)
+                await session.flush()
+
+            dungeon = Dungeons(
+                vk_id=player.vk_id,
+                map_data={"rooms": UserService._generate_map()},
+                pos_x=1,
+                pos_y=1,
+                active=True,
+                rooms_cleared=0,
+            )
+            session.add(dungeon)
+            await session.commit()
+            await session.refresh(dungeon)
+            return dungeon, True
+
+    @staticmethod
+    async def enter_dungeon_room(dungeon: Dungeons, player: Players) -> dict:
+        key = f"{dungeon.pos_x},{dungeon.pos_y}"
+        room = dungeon.map_data.get("rooms", {}).get(key)
+        if not room:
+            return {"message": "Вы в пустоте.", "type": "empty"}
+
+        msg = f"📍 {room['name']}\n{room['description']}"
+        if room["type"] in ("combat", "boss") and not room.get("cleared"):
+            msg += "\n\n⚔️ Враг готов к бою!"
+            return {"message": msg, "type": room["type"], "battle_id": 0}
+
+        return {"message": msg, "type": room["type"]}
+
+    @staticmethod
+    async def get_available_exits(dungeon: Dungeons) -> tuple[list[dict], bool]:
+        rooms = dungeon.map_data.get("rooms", {})
+        cx, cy = dungeon.pos_x, dungeon.pos_y
+        exits = []
+        for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0)):
+            nx, ny = cx + dx, cy + dy
+            if 1 <= nx <= 7 and 1 <= ny <= 3:
+                key = f"{nx},{ny}"
+                if key in rooms:
+                    r = rooms[key]
+                    exits.append({
+                        "x": nx, "y": ny,
+                        "type": r["type"],
+                        "name": r["name"],
+                        "cleared": r.get("cleared", False),
+                    })
+        return exits, True
+
+    @staticmethod
+    async def move_in_dungeon(dungeon: Dungeons, new_x: int, new_y: int) -> tuple[Dungeons, bool, str]:
+        if not (1 <= new_x <= 7 and 1 <= new_y <= 3):
+            return dungeon, False, "Координаты вне карты."
+
+        if abs(new_x - dungeon.pos_x) + abs(new_y - dungeon.pos_y) != 1:
+            return dungeon, False, "Можно шагать только на соседнюю клетку."
+
+        key = f"{new_x},{new_y}"
+        if key not in dungeon.map_data.get("rooms", {}):
+            return dungeon, False, "Туда нет пути."
+
+        dungeon.pos_x = new_x
+        dungeon.pos_y = new_y
+
+        async with get_session() as session:
+            merged = await session.merge(dungeon)
+            await session.commit()
+            await session.refresh(merged)
+            return merged, True, ""
+
+    @staticmethod
+    async def complete_dungeon(dungeon: Dungeons, player: Players, success: bool = True):
+        async with get_session() as session:
+            dungeon.active = False
+            merged = await session.merge(dungeon)
+            await session.commit()
+            await session.refresh(merged)
+
+            player.location_id = settings.DUNGEON_LOCATION
+            p = await session.merge(player)
+            await session.commit()
+            await session.refresh(p)
+            return merged
+
+    @staticmethod
+    async def get_dungeon_room(dungeon: Dungeons) -> tuple[dict | None, bool]:
+        key = f"{dungeon.pos_x},{dungeon.pos_y}"
+        room = dungeon.map_data.get("rooms", {}).get(key)
+        if not room:
+            return None, False
+        return {
+            "name": room["name"],
+            "description": room["description"],
+            "type": room["type"],
+            "x": dungeon.pos_x,
+            "y": dungeon.pos_y,
+            "cleared": room.get("cleared", False),
+        }, True
