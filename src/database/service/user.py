@@ -685,3 +685,14 @@ class UserService:
             "y": dungeon.pos_y,
             "cleared": room.get("cleared", False),
         }, True
+        
+    @staticmethod
+    async def get_active_battle(vk_id: int) -> tuple[Battles | None, bool]:
+        async with get_session() as session:
+            result = await session.execute(
+                select(Battles)
+                .where(Battles.vk_id == vk_id, Battles.status == True)
+                .order_by(Battles.created_at.desc())
+            )
+            battle = result.scalar_one_or_none()
+            return battle, battle is not None

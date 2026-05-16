@@ -140,13 +140,14 @@ def build_combat_kb(battle_id: int) -> str:
 async def build_dungeon_room_kb(dungeon, room_data):
     room_type = room_data.get("type")
     
-    if room_type in ("start", "shrine", "treasure"):
+    if room_type in ("start", "shrine", "treasure", "exit"):
         exits, _ = await UserService.get_available_exits(dungeon)
         return build_navigation_kb(exits)
     elif room_type in ("combat", "boss"):
-        # ищем активный бой
-        # TODO: получить battle_id из состояния
-        return build_combat_kb(0)
+            battle, ok = await UserService.get_active_battle(dungeon.vk_id)
+            battle_id = battle.id if ok else 0
+            return build_combat_kb(battle_id)
+
     
     return Keyboard(inline=True).get_json()
 

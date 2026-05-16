@@ -2,9 +2,8 @@ from sqlalchemy import String, Integer, ForeignKey, JSON, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from sqlalchemy.ext.mutable import MutableDict
 from database.core import Base
-from pathlib import Path
 from typing import Optional
-import json
+import datetime
 
 DEFAULT_EQUIPMENT = {
     "weapon": None,
@@ -89,6 +88,7 @@ class Battles(Base):
     vk_id: Mapped[int] = mapped_column(Integer, index=True)
     state: Mapped[dict] = mapped_column(MutableDict.as_mutable(JSON), nullable=False)
     status: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow) 
 
 # Модель противников 
 class Monsters(Base):
