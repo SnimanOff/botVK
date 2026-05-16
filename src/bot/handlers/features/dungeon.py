@@ -5,8 +5,6 @@ from bot.handlers.move import build_move_keyboard
 
 async def enter_dungeon(event, player):
     logger.debug("Вход в данж, пользователь: {}", player.vk_id)
-    
-    # Создаём данж
     dungeon, ok = await UserService.create_dungeon(player)
     if not ok:
         await snackbar(event, "Не удалось создать данж")
@@ -80,7 +78,7 @@ async def combat_action(event, player, payload):
     
     logger.debug("Боевое действие: {}, пользователь: {}", action, player.vk_id)
     
-    # Заглушка — пока просто отвечаем
+    # пока просто отвечаем
     if action == "attack":
         await snackbar(event, "Удар нанесён")
     elif action == "defend":
@@ -97,18 +95,9 @@ def build_navigation_kb(exits: list[dict]) -> str:
         x, y = exit_data["x"], exit_data["y"]
         cleared = "(пройдено)" if exit_data["cleared"] else ""
         
-        label = {
-            "start": "[Вход]",
-            "combat": "[Бой]",
-            "treasure": "[Сокр]",
-            "shrine": "[Шрн]",
-            "boss": "[БОСС]",
-            "exit": "[Выход]",
-        }.get(exit_data["type"], "[?]")
-        
         keyboard.add(
             Callback(
-                f"> {label} {exit_data['name']} {cleared}",
+                f"({x},{y}) {cleared}",
                 payload={"cmd": "dungeon_move", "x": x, "y": y}
             ),
             color=KeyboardButtonColor.PRIMARY
