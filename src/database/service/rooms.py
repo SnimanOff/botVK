@@ -189,7 +189,7 @@ class TreasureRoom(DungeonRoom):
     async def enter(self) -> dict:
         logger.debug("Вход в treasure комнату {}, игрок {}", self.coords, self.player.vk_id)
         
-        equip_value = await UserService.get_equipment_value(self.player)
+        equip_value = await UserService.get_equipment_price(self.player)
         gold_reward = max(math.floor(equip_value * self.REWARD_PERCENT), 5)
         
         logger.debug("Стоимость экипировки: {}, награда: {}", equip_value, gold_reward)

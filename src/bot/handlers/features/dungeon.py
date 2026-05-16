@@ -1,13 +1,9 @@
-# bot/handlers/dungeon.py
-
 from vkbottle import Callback, Keyboard, KeyboardButtonColor
 from loguru import logger
-
 from database.service.user import UserService
-
+from bot.handlers.move import build_move_keyboard
 
 async def enter_dungeon(event, player):
-    """Вход в данж через feature кнопку"""
     logger.debug("Вход в данж, пользователь: {}", player.vk_id)
     
     # Создаём данж
@@ -16,10 +12,7 @@ async def enter_dungeon(event, player):
         await snackbar(event, "Не удалось создать данж")
         return
     
-    # Входим в стартовую комнату
     result = await UserService.enter_dungeon_room(dungeon, player)
-    
-    # Получаем доступные выходы
     exits, _ = await UserService.get_available_exits(dungeon)
     keyboard = build_navigation_kb(exits)
     
@@ -34,7 +27,6 @@ async def enter_dungeon(event, player):
 
 
 async def dungeon_move(event, player, payload):
-    """Перемещение в выбранную комнату"""
     dungeon, ok = await UserService.get_active_dungeon(player.vk_id)
     if not ok:
         await snackbar(event, "Нет активного данжа")
@@ -43,21 +35,18 @@ async def dungeon_move(event, player, payload):
     new_x = payload.get("x")
     new_y = payload.get("y")
     
-    # Перемещаем
     dungeon, moved, msg = await UserService.move_in_dungeon(dungeon, new_x, new_y)
     if not moved:
         await snackbar(event, msg)
         return
     
-    # Входим в комнату
     result = await UserService.enter_dungeon_room(dungeon, player)
     
-    # Проверяем тип комнаты и строим соответствующую клавиатуру
     room_type = result.get("type")
     
     if room_type == "exit":
         await UserService.complete_dungeon(dungeon, player, success=True)
-        keyboard = await build_move_kb(player.location_id)
+        keyboard = await build_move_keyboard(player.location_id)
         await event.ctx_api.messages.send(
             peer_id=event.object.peer_id,
             message=f"{result['message']}\n\nПодземелье пройдено!",
@@ -67,7 +56,6 @@ async def dungeon_move(event, player, payload):
         await delete(event)
         return
     
-    # Для остальных комнат — своя клавиатура
     if room_type in ("start", "shrine", "treasure"):
         exits, _ = await UserService.get_available_exits(dungeon)
         keyboard = build_navigation_kb(exits)
@@ -167,7 +155,7 @@ async def build_dungeon_room_kb(dungeon, room_data):
         exits, _ = await UserService.get_available_exits(dungeon)
         return build_navigation_kb(exits)
     elif room_type in ("combat", "boss"):
-        # Ищем активный бой
+        # ищем активный бой
         # TODO: получить battle_id из состояния
         return build_combat_kb(0)
     

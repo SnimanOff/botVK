@@ -5,7 +5,7 @@ from loguru import logger
 
 from database.service.user import UserService
 from bot.handlers.move import build_move_keyboard
-from bot.handlers.features.dungeon import build_dungeon_start_kb
+from bot.handlers.features.dungeon import build_dungeon_room_kb
 
 labeler = BotLabeler()
 

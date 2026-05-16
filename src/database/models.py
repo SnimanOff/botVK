@@ -80,7 +80,8 @@ class Items(Base):
     slot: Mapped[Optional[str]] = mapped_column(String(20))
     stats: Mapped[dict] = mapped_column(JSON, default=dict)
     price: Mapped[int] = mapped_column(Integer, default=0)
-    
+
+# Молдель боя
 class Battles(Base):
     __tablename__ = "battles"
     
@@ -89,6 +90,7 @@ class Battles(Base):
     state: Mapped[dict] = mapped_column(MutableDict.as_mutable(JSON), nullable=False)
     status: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+# Модель противников 
 class Monsters(Base):
     __tablename__ = "monsters"
     
@@ -97,7 +99,8 @@ class Monsters(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str] = mapped_column(String(500))
     rarity: Mapped[str] = mapped_column(String(20), default="common")
-    
+
+# Модель данжей
 class Dungeons(Base):
     __tablename__ = "dungeons"
     

@@ -1,10 +1,8 @@
 from vkbottle import GroupEventType, GroupTypes
 from vkbottle.bot import BotLabeler
 from loguru import logger
-
 from database.service.user import UserService
 
-# Импортируем хендлеры из других модулей
 from bot.handlers.move import handle_move
 from bot.handlers.features.shop import (
     shop_open,

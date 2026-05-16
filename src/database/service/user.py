@@ -344,6 +344,13 @@ class UserService:
     
     @staticmethod
     async def use_item(player: Players, index: int) -> tuple[Players, bool]:
+        """
+        use item
+        
+        применение предметов игроком
+        
+        Возвращает модель игрока и результат операции
+        """
         bag = player.inventory.get("bag", [])
         if index < 0 or index >= len(bag):
             return player, False
@@ -355,9 +362,7 @@ class UserService:
 
         stats = item.stats   # dict, например {"stat": "attack", "modifier": 10, "duration": 3}
 
-        # Если это бафф
         if "stat" in stats and "modifier" in stats:
-            # Находим активный бой
             async with get_session() as session:
                 result = await session.execute(
                     select(Battles)
@@ -380,6 +385,7 @@ class UserService:
 
             bag.pop(index)
             player.inventory["bag"] = bag
+            
             async with get_session() as session:
                 merged = await session.merge(player)
                 await session.commit()
@@ -389,13 +395,17 @@ class UserService:
             effect_name = stats.get("effect")
             value = stats.get("value")
             effect_func = EFFECTS.get(effect_name)
+            
             if not effect_func:
                 return player, False
             player, ok = await effect_func(player, value)
+            
             if not ok:
                 return player, False
+            
             bag.pop(index)
             player.inventory["bag"] = bag
+            
             async with get_session() as session:
                 merged = await session.merge(player)
                 await session.commit()
@@ -425,6 +435,13 @@ class UserService:
 
     @staticmethod
     async def buy_item(player: Players, item_code: str) -> tuple[Players, bool]:
+        """
+        buy item
+        
+        покупка предмета игроком, проверяет, хватает ли у игрока денег
+        
+        Возвращает модель игрока и результат операции    
+        """
         item, ok = await UserService.get_item(item_code)
         
         if not ok:
@@ -471,6 +488,13 @@ class UserService:
     
     @staticmethod
     async def get_total_stats(player: Players) -> dict:
+        """
+        get total stats
+        
+        считает статистику игрока учитывая, кольца, броню, меч . . .
+        
+        возвращает все статы игрока в dict формате    
+        """
         stats = {
             "health": player.health,
             "max_health": player.max_health,
@@ -490,7 +514,14 @@ class UserService:
         return stats
 
     @staticmethod
-    async def get_equipment_value(player: Players) -> int:
+    async def get_equipment_price(player: Players) -> int:
+        """
+        get equipment 
+        
+        считает общую цену всех предметов игрока
+        
+        возвращает число
+        """
         total = 0
         
         for slot in ["weapon", "armor", "ring"]:
