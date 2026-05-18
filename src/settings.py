@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     VK_TOKEN: str
     DATABASE: str
     DUNGEON_LOCATION: int
+    HUB_LOCATION: int
     
     class Config:
         env_file = ".env"

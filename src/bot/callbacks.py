@@ -15,6 +15,11 @@ from bot.handlers.features.dungeon import (
     enter_dungeon,
     dungeon_move,
     combat_action,
+    start_combat,
+    snackbar,
+    delete,
+    treasure_open,
+    shrine_use,
 )
 
 labeler = BotLabeler()
@@ -26,7 +31,8 @@ async def router(event: GroupTypes.MessageEvent):
     cmd = payload.get("cmd")
     user_id = event.object.user_id
     player = await UserService.GoC_user(user_id)
-    
+
+    logger.info(">>> ROUTER CALLED: cmd={}, payload={}", cmd, payload)
     logger.debug("Callback: cmd={}, user={}", cmd, user_id)
     
     if cmd == "move":
@@ -55,6 +61,13 @@ async def router(event: GroupTypes.MessageEvent):
     elif cmd == "dungeon_move":
         await dungeon_move(event, player, payload)
         
+    elif cmd == "start_combat":
+        dungeon, ok = await UserService.get_active_dungeon(player.vk_id)
+        if not ok:
+            await snackbar(event, "Нет активного данжа")
+            return
+        await start_combat(event, player, dungeon)
+        
     elif cmd == "combat_action":
         await combat_action(event, player, payload)
     
@@ -65,6 +78,11 @@ async def router(event: GroupTypes.MessageEvent):
     elif cmd == "shrine_use":
         from bot.handlers.features.dungeon import shrine_use
         await shrine_use(event, player, payload)
-    
+
+    elif feature_id == "exit_dungeon":
+        dungeon, ok = await UserService.get_active_dungeon(player.vk_id)
+        if ok:
+            await UserService.exit_dungeon(player)
+        await back_to_location(event, player)
     else:
         logger.warning("Неизвестная команда: {}", cmd)

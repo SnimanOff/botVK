@@ -61,6 +61,7 @@ class Players(Base):
     protection: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
     attack: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
     balance: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
+    in_dungeon: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     
     inventory: Mapped[dict] = mapped_column(MutableDict.as_mutable(JSON), default=lambda: DEFAULT_EQUIPMENT.copy())
     

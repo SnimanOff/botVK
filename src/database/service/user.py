@@ -5,6 +5,7 @@ from loguru import logger
 from sqlalchemy.orm.attributes import flag_modified
 from settings import settings
 from database.effects import EFFECTS
+from database.service.dungeon import DungeonService, DungeonGenerator
 import random
 
 class UserService:
@@ -82,6 +83,8 @@ class UserService:
                 logger.error("Предмет с кодом {} не найден", item_code)
                 return player, False
             
+            player = await session.merge(player)
+            
             if item.type == "weapon":
                 player.inventory["weapon"] = item.code
             elif item.type == "armor":
@@ -93,7 +96,6 @@ class UserService:
 
             flag_modified(player, "inventory")
             
-            session.add(player)
             await session.commit()
             await session.refresh(player)
             
@@ -195,7 +197,7 @@ class UserService:
                     player_codes.add(player.inventory["weapon"])
             elif item_type == "armor":
                 if player.inventory.get("armor"):
-                    player.codes.add(player.inventory["armor"])
+                    player_codes.add(player.inventory["armor"])
             elif item_type == "ring":
                 if player.inventory.get("ring"):
                     player_codes.add(player.inventory["ring"])
@@ -236,6 +238,7 @@ class UserService:
             
             except Exception as error:
                 logger.debug("Получение локации по id={} не удалось из-за ошибки: {}", location_id, error)
+                return None, False
                 
     @staticmethod
     async def enter_dungeon(player: Players) -> tuple[Players, bool]:
@@ -246,7 +249,6 @@ class UserService:
         
         Возвращает модель игрока и результат операции
         """
-        id = player.vk_id
         player_location = player.location_id
         enter_location = settings.DUNGEON_LOCATION
 
@@ -263,6 +265,12 @@ class UserService:
         if not ok:
             return player, False
 
+        async with get_session() as session:
+            player = await session.merge(player)
+            player.in_dungeon = True
+            await session.commit()
+            await session.refresh(player)
+
         return player, True
         
     @staticmethod
@@ -270,25 +278,26 @@ class UserService:
         """
         exit dungeon 
         
-        Выпускает пользователя в данж при выполнении условий
+        Выпускает пользователя из данжа при выполнении условий
         
         Возвращает модель игрока и результат операции
         """
-        id = player.vk_id
-        dungeon, ok = await UserService.get_active_dungeon(player.id)
+        dungeon, ok = await UserService.get_active_dungeon(player.vk_id)
         if not ok:
             logger.warning("Игрок {} не в данже", player.id)
             return player, False
 
         async with get_session() as session:
+            dungeon = await session.merge(dungeon)
             dungeon.active = False
             await session.commit()
 
-            player.location_id = settings.DUNGEON_LOCATION
-            merged = await session.merge(player)
+            player = await session.merge(player)
+            player.location_id = settings.HUB_LOCATION
+            player.in_dungeon = False
             await session.commit()
-            await session.refresh(merged)
-            return merged, True
+            await session.refresh(player)
+            return player, True
     
     @staticmethod
     async def remove_item(player: Players, slot: str) -> tuple[Players, bool]:
@@ -299,8 +308,10 @@ class UserService:
         
         Возвращает модель игрока и результат операции
         """
-        inventory = player.inventory
         async with get_session() as session:
+            player = await session.merge(player)
+            inventory = player.inventory
+            
             if slot in ["weapon", "armor", "ring"]:
                 if not inventory.get(slot):
                     logger.debug("Слот {} уже пуст у игрока {}", slot, player.vk_id)
@@ -316,6 +327,7 @@ class UserService:
                 logger.error("Неизвестный слот: {}", slot)
                 return player, False
             
+            flag_modified(player, "inventory")
             await session.commit()
             await session.refresh(player)
             logger.debug("Предмет удалён из слота {} у игрока {}", slot, player.vk_id)
@@ -331,6 +343,7 @@ class UserService:
         Возвращает модель игрока и результат операции
         """
         async with get_session() as session:
+            player = await session.merge(player)
             bag = player.inventory.get("bag", [])
             
             if index < 0 or index >= len(bag):
@@ -340,6 +353,7 @@ class UserService:
             removed = bag.pop(index)
             player.inventory["bag"] = bag
             
+            flag_modified(player, "inventory")
             await session.commit()
             await session.refresh(player)
             logger.debug("Предмет {} удалён из сумки у игрока {}", removed, player.vk_id)
@@ -368,6 +382,7 @@ class UserService:
 
         if "stat" in stats and "modifier" in stats:
             async with get_session() as session:
+                player = await session.merge(player)
                 result = await session.execute(
                     select(Battles)
                     .where(and_(Battles.vk_id == player.vk_id,
@@ -392,6 +407,7 @@ class UserService:
             
             async with get_session() as session:
                 merged = await session.merge(player)
+                flag_modified(merged, "inventory")
                 await session.commit()
                 await session.refresh(merged)
                 return merged, True
@@ -412,6 +428,7 @@ class UserService:
             
             async with get_session() as session:
                 merged = await session.merge(player)
+                flag_modified(merged, "inventory")
                 await session.commit()
                 await session.refresh(merged)
                 return merged, True
@@ -430,12 +447,12 @@ class UserService:
             return player, False
 
         async with get_session() as session:
+            player = await session.merge(player)
             player.balance += amount
-            merged = await session.merge(player)
             await session.commit()
-            await session.refresh(merged)
-            logger.debug("Игрок {} получил {} монет, баланс: {}", player.vk_id, amount, merged.balance)
-            return merged, True
+            await session.refresh(player)
+            logger.debug("Игрок {} получил {} монет, баланс: {}", player.vk_id, amount, player.balance)
+            return player, True
 
     @staticmethod
     async def buy_item(player: Players, item_code: str) -> tuple[Players, bool]:
@@ -454,7 +471,7 @@ class UserService:
         
         if not item.slot:
             bag = player.inventory.get("bag", [])
-            if len(bag) > 20:
+            if len(bag) >= 20:
                 logger.debug("Сумка полна у игрока {}", player.vk_id)
                 return player, False
         
@@ -466,13 +483,14 @@ class UserService:
             if found:
                 sell_price = old_item.price // 2
         
-        final_price = item.price - sell_price
+        final_price = max(0, item.price - sell_price)
         
         if player.balance < final_price:
             logger.debug("У игрока {} недостаточно: {} < {}", player.vk_id, player.balance, final_price)
             return player, False
         
         async with get_session() as session:
+            player = await session.merge(player)
             player.balance -= final_price
             
             if item.slot:
@@ -480,15 +498,15 @@ class UserService:
             else:
                 player.inventory["bag"].append(item.code)
             
-            merged = await session.merge(player)
+            flag_modified(player, "inventory")
             await session.commit()
-            await session.refresh(merged)
+            await session.refresh(player)
             
             logger.info(
                 "Игрок {} купил {} за {} (продал {} за {})",
                 player.vk_id, item.name, final_price, old_item_code, sell_price
             )
-            return merged, True
+            return player, True
     
     @staticmethod
     async def get_total_stats(player: Players) -> dict:
@@ -593,9 +611,7 @@ class UserService:
     @staticmethod
     async def create_dungeon(player: Players) -> tuple[Dungeons | None, bool]:
         async with get_session() as session:
-            old = await session.execute(
-                select(Dungeons).where(Dungeons.vk_id == player.vk_id)
-            )
+            old = await session.execute(select(Dungeons).where(Dungeons.vk_id == player.vk_id))
             old_dungeon = old.scalar_one_or_none()
             if old_dungeon:
                 await session.delete(old_dungeon)
@@ -633,7 +649,17 @@ class UserService:
 
         msg = f"📍 {room['name']}\n{room['description']}"
         if room["type"] in ("combat", "boss") and not room.get("cleared"):
-            monster_name = room.get("monster_name", "Неизвестный враг")
+            # Получаем случайного противника
+            async with get_session() as session:
+                result = await session.execute(select(Monsters))
+                monsters = result.scalars().all()
+                
+                if monsters:
+                    monster = random.choice(monsters)
+                    monster_name = monster.name
+                else:
+                    monster_name = "Неизвестный враг"
+            
             msg += f"\n\n⚔️ {monster_name} готов к бою!"
             return {"message": msg, "type": room["type"], "battle_id": 0, "monster_name": monster_name}
 
@@ -686,18 +712,53 @@ class UserService:
             return merged, True, ""
 
     @staticmethod
-    async def complete_dungeon(dungeon: Dungeons, player: Players, success: bool = True):
+    async def move_to(dungeon: Dungeons, new_x: int, new_y: int) -> tuple[Dungeons, bool, str]:
+        can_move, reason = await DungeonService.can_move_to(dungeon, new_x, new_y)
+        if not can_move:
+            return dungeon, False, reason
+        
         async with get_session() as session:
-            dungeon.active = False
+            old_pos = (dungeon.pos_x, dungeon.pos_y)
+            dungeon.pos_x = new_x
+            dungeon.pos_y = new_y
+            
+            room = await DungeonService.get_current_room(dungeon)
+            if room and not room.get("cleared", False):
+                room["cleared"] = True
+                dungeon.rooms_cleared += 1
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(dungeon, "map_data")
+            
             merged = await session.merge(dungeon)
             await session.commit()
             await session.refresh(merged)
+            
+            logger.debug(
+                "Игрок {} переместился ({},{}) -> ({},{})",
+                dungeon.vk_id, old_pos[0], old_pos[1], new_x, new_y
+            )
+            return merged, True, ""
 
-            player.location_id = settings.DUNGEON_LOCATION
-            p = await session.merge(player)
+    @staticmethod
+    async def complete_dungeon(dungeon: Dungeons, success: bool = True) -> Dungeons:
+        async with get_session() as session:
+            dungeon = await session.merge(dungeon)
+            dungeon.active = False
+            
+            if dungeon.player:
+                dungeon.player.in_dungeon = False
+                logger.debug(
+                    "DungeonService: player.in_dungeon -> False"
+                )
+            
             await session.commit()
-            await session.refresh(p)
-            return merged
+            await session.refresh(dungeon)
+            
+            logger.info(
+                "Данж id={} завершён, vk_id={}, rooms_cleared={}",
+                dungeon.id, dungeon.vk_id, dungeon.rooms_cleared
+            )
+            return dungeon
 
     @staticmethod
     async def get_dungeon_room(dungeon: Dungeons) -> tuple[dict | None, bool]:

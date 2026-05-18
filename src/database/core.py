@@ -7,14 +7,14 @@ from typing import AsyncGenerator
 DATABASE = settings.DATABASE
 
 engine = create_async_engine(
-    DATABASE,
-    echo = True,
+    DATABASE, 
+    echo=True
 )
 
 AsyncSessionMaker = async_sessionmaker(
     engine,
     class_=AsyncSession,
-    expire_on_commit=True,
+    expire_on_commit=False,   # <-- важно для async
     autoflush=False,
 )
 
