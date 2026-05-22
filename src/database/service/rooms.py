@@ -21,7 +21,7 @@ class DungeonRoom:
 
 
 class CombatRoom(DungeonRoom):
-    POWER_MIN = 0.50
+    POWER_MIN = 0.60
     POWER_MAX = 0.80
     
     async def enter(self) -> dict:
@@ -57,10 +57,10 @@ class CombatRoom(DungeonRoom):
             "battle_id": battle.id,
             "message": (
                 f"Боевая комната\n"
-                f"{enemy['name']}\n"
-                f"HP: {enemy['health']}/{enemy['max_health']} | "
-                f"ATK: {enemy['attack']} | DEF: {enemy['defense']}\n"
-                f"Сила: {enemy['power_percent']}% от твоей"
+                f"{enemy["name"]}\n"
+                f"HP: {enemy["health"]}/{enemy["max_health"]} | "
+                f"ATK: {enemy["attack"]} | DEF: {enemy["defense"]}\n"
+                f"Сила: {enemy["power_percent"]}% от твоей"
             ),
         }
     
@@ -98,8 +98,8 @@ class CombatRoom(DungeonRoom):
 
 
 class BossRoom(DungeonRoom):
-    POWER_MIN = 0.80
-    POWER_MAX = 1.10
+    POWER_MIN = 0.70
+    POWER_MAX = 1.00
     
     async def enter(self) -> dict:
         logger.debug("Вход в boss комнату {}, игрок {}", self.coords, self.player.vk_id)
@@ -134,10 +134,10 @@ class BossRoom(DungeonRoom):
             "battle_id": battle.id,
             "message": (
                 f"БОСС\n"
-                f"{enemy['name']}\n"
-                f"HP: {enemy['health']}/{enemy['max_health']} | "
-                f"ATK: {enemy['attack']} | DEF: {enemy['defense']}\n"
-                f"Сила: {enemy['power_percent']}% от твоей"
+                f"{enemy["name"]}\n"
+                f"HP: {enemy["health"]}/{enemy["max_health"]} | "
+                f"ATK: {enemy["attack"]} | DEF: {enemy["defense"]}\n"
+                f"Сила: {enemy["power_percent"]}% от твоей"
             ),
         }
     

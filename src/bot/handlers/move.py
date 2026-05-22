@@ -10,7 +10,7 @@ async def build_move_keyboard(location_id: int):
         for loc in paths:
             keyboard.add(
                 Callback(
-                    f"➡ {loc.name}",
+                    f"{loc.name}",
                     payload={"cmd": "move", "to": loc.id_location}
                 ),
                 color=KeyboardButtonColor.PRIMARY
@@ -52,9 +52,9 @@ async def handle_move(event, player, payload):
         await event.ctx_api.messages.send(
             peer_id=event.object.peer_id,
             message=(
-                f"📍 Ты в локации {to_id}\n"
-                f"❤️ HP: {player.health}/{player.max_health}\n"
-                f"💰 {player.balance} монет\n\n"
+                f"Вы в локации {to_id}\n"
+                f"Здоровье {player.health}/{player.max_health}\n"
+                f"Баланс {player.balance} монет\n\n"
                 f"Куда дальше?"
             ),
             keyboard=new_keyboard,
@@ -66,7 +66,7 @@ async def handle_move(event, player, payload):
                 event_id=event.object.event_id,
                 user_id=user_id,
                 peer_id=event.object.peer_id,
-                event_data={"type": "show_snackbar", "text": f"✅ Перемещение в {to_id}"}
+                event_data={"type": "show_snackbar", "text": f"Перемещение в {to_id}"}
             )
         except Exception as e:
             logger.warning("Не удалось показать snackbar: {}", e)
@@ -78,7 +78,7 @@ async def handle_move(event, player, payload):
                 event_id=event.object.event_id,
                 user_id=user_id,
                 peer_id=event.object.peer_id,
-                event_data={"type": "show_snackbar", "text": "❌ Туда не пройти!"}
+                event_data={"type": "show_snackbar", "text": "Туда не пройти"}
             )
         except Exception as e:
             logger.warning("Не удалось показать snackbar: {}", e)

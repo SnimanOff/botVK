@@ -71,7 +71,7 @@ async def add_locations(maps_directory: str = "maps") -> bool:
                 to_pk = ext_to_pk.get(to_ext_id)
                 
                 if to_pk is None:
-                    logger.error("Ребро из [{}] → [{}]: локация не найдена", from_ext_id, to_ext_id)
+                    logger.error("Ребро из [{}] -> [{}]: локация не найдена", from_ext_id, to_ext_id)
                     raise ValueError(f"Локация {to_ext_id} не найдена")
                 
                 session.add(Edges(from_id=from_pk, to_id=to_pk))
@@ -80,5 +80,5 @@ async def add_locations(maps_directory: str = "maps") -> bool:
             logger.debug("Локация [{}]: {} рёбер", from_ext_id, len(edges_data))
         
         await session.commit()
-        logger.success("Мир пересобран! Локаций: {}, Рёбер: {}", len(ext_to_pk), total_edges)
+        logger.success("Мир пересобран. Локаций: {}, Рёбер: {}", len(ext_to_pk), total_edges)
         return True

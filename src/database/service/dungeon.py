@@ -6,8 +6,8 @@ from database.core import get_session
 from database.models import Dungeons, Players, Battles, Monsters, Items
 from sqlalchemy.orm.attributes import flag_modified
 from loguru import logger
-
-
+from database.effects import apply_combat_heal
+from database.effects import apply_combat_buff
 class DungeonGenerator:
     VERTICAL_CHANCE = {
         1: 1.0,
@@ -118,7 +118,6 @@ class DungeonGenerator:
                 y = int(y_str)
                 exits = []
                 
-                # Только вперёд (x+1), назад нельзя
                 next_x = x + 1
                 next_floor = floors.get(str(next_x), {})
                 for dy in [-1, 0, 1]:
@@ -191,14 +190,19 @@ class DungeonService:
     async def create_dungeon(player: Players) -> Dungeons:
         logger.info("Создание данжа для vk_id={}", player.vk_id)
         
-        abandoned = await DungeonService.abandon_dungeon(player.vk_id)
-        if abandoned:
-            logger.debug("Старый данж завершён")
-        
         map_data = DungeonGenerator.generate()
         logger.debug("Карта сгенерирована, seed={}", map_data["seed"])
         
         async with get_session() as session:
+            old_result = await session.execute(
+                select(Dungeons).where(Dungeons.vk_id == player.vk_id)
+            )
+            old_dungeon = old_result.scalar_one_or_none()
+            if old_dungeon:
+                await session.delete(old_dungeon)
+                await session.flush()
+                logger.debug("Старый данж удален и применен на уровне БД")
+            
             dungeon = Dungeons(
                 vk_id=player.vk_id,
                 map_data=map_data,
@@ -208,17 +212,16 @@ class DungeonService:
                 rooms_cleared=0,
             )
             session.add(dungeon)
-            logger.debug("Данж добавлен в сессию")
+            await session.flush()
+
+            db_player = await session.merge(player)
+            db_player.in_dungeon = True
             
             await session.commit()
             await session.refresh(dungeon)
-            logger.debug("Данж сохранён, id={}", dungeon.id)
-            
-            player.dungeon = True
-            await session.commit()
             
             logger.info(
-                "Данж создан для vk_id={}, id={}, pos=(1,1)",
+                "Данж успешно создан для vk_id={}, id={}, pos=(1,1)",
                 player.vk_id, dungeon.id
             )
             return dungeon
@@ -285,7 +288,6 @@ class DungeonService:
     
     @staticmethod
     def get_room_at_sync(dungeon: Dungeons, x: int, y: int) -> Optional[dict]:
-        """Синхронная версия для использования в хендлерах (данные уже в памяти)"""
         floor = dungeon.map_data.get("floors", {}).get(str(x))
         if not floor:
             return None
@@ -303,8 +305,6 @@ class DungeonService:
             for y_str, room in floor_data.items():
                 y = int(y_str)
                 exits = []
-                
-                # Только вперёд (x+1), назад нельзя
                 next_x = x + 1
                 next_floor = floors.get(str(next_x), {})
                 for dy in [-1, 0, 1]:
@@ -329,6 +329,17 @@ class DungeonService:
         if not (1 <= new_x <= 7 and 1 <= new_y <= 3):
             return False, "За пределами данжа"
         
+        current_room = await DungeonService.get_current_room(dungeon)
+        if current_room:
+            needs_clearing = current_room.get("type") in ("combat", "boss", "treasure", "shrine")
+            if needs_clearing and not current_room.get("cleared", False):
+                return False, "Сначала нужно завершить испытание в этой комнате"
+                
+            exits = current_room.get("exits", [])
+            target_key = f"{new_x},{new_y}"
+            if target_key not in exits:
+                return False, "Нет прохода в эту комнату"
+        
         floor = dungeon.map_data.get("floors", {}).get(str(new_x))
         if not floor:
             return False, "Этот путь ведёт в пустоту"
@@ -337,45 +348,27 @@ class DungeonService:
         if not room:
             return False, "Там нет комнаты"
         
-        current_room = await DungeonService.get_current_room(dungeon)
-        if current_room:
-            exits = current_room.get("exits", [])
-            target_key = f"{new_x},{new_y}"
-            logger.debug(
-                "Текущие выходы: {}, проверяем: {}",
-                exits, target_key
-            )
-            if target_key not in exits:
-                logger.debug("Отказ — нет выхода в ({},{})", new_x, new_y)
-                return False, "Нет прохода в эту комнату"
-        
         if new_y == 3:
             mid_room = floor.get("rooms", {}).get("2")
             if not mid_room:
-                logger.debug("Отказ — нет y=2 для доступа к y=3")
                 return False, "Нет пути на третий уровень"
         
-        logger.debug("Разрешено движение в ({},{})", new_x, new_y)
         return True, ""
     
     @staticmethod
     async def move_to(dungeon: Dungeons, new_x: int, new_y: int) -> tuple[Dungeons, bool, str]:
+
+        from database.service.dungeon import DungeonService
+
         can_move, reason = await DungeonService.can_move_to(dungeon, new_x, new_y)
         if not can_move:
             return dungeon, False, reason
         
         async with get_session() as session:
-            dungeon = await session.merge(dungeon)  # <-- ВОТ ЭТО ДОБАВИЛ
+            dungeon = await session.merge(dungeon)
             old_pos = (dungeon.pos_x, dungeon.pos_y)
             dungeon.pos_x = new_x
             dungeon.pos_y = new_y
-            
-            room = await DungeonService.get_current_room(dungeon)
-            if room and not room.get("cleared", False):
-                room["cleared"] = True
-                dungeon.rooms_cleared += 1
-                from sqlalchemy.orm.attributes import flag_modified
-                flag_modified(dungeon, "map_data")
             
             await session.commit()
             await session.refresh(dungeon)
@@ -426,10 +419,11 @@ class DungeonService:
         room = await DungeonService.get_current_room(dungeon)
         if room and not room.get("cleared"):
             room["cleared"] = True
-            from sqlalchemy.orm.attributes import flag_modified
-            flag_modified(dungeon, "map_data")
             
             async with get_session() as session:
+                dungeon = await session.merge(dungeon)
+                dungeon.rooms_cleared += 1
+                flag_modified(dungeon, "map_data")
                 await session.commit()
                 await session.refresh(dungeon)
                 logger.debug("Комната помечена cleared")
@@ -441,14 +435,14 @@ class DungeonService:
     @staticmethod
     async def complete_dungeon(dungeon: Dungeons, success: bool = True) -> Dungeons:
         async with get_session() as session:
+            dungeon = await session.merge(dungeon)
             dungeon.active = False
-            
             if dungeon.player:
-                old_dungeon_flag = dungeon.player.dungeon
-                dungeon.player.dungeon = False
+                old_flag = dungeon.player.in_dungeon
+                dungeon.player.in_dungeon = False
                 logger.debug(
-                    "DungeonService: player.dungeon {} -> False",
-                    old_dungeon_flag
+                    "DungeonService: player.in_dungeon {} -> False для vk_id={}",
+                    old_flag, dungeon.vk_id
                 )
             
             await session.commit()
@@ -462,15 +456,22 @@ class DungeonService:
 
 
 class BattleService:
-    """Сервис для управления боевой системой"""
-    
     @staticmethod
     async def create_battle(player: Players, dungeon: Dungeons) -> tuple[Battles, bool]:
-        """Создает новый бой с случайным противником"""
         logger.info("Создание боя для игрока vk_id={}", player.vk_id)
+        from database.service.user import UserService
+
+        player_stats = await UserService.get_effective_stats(player)
         
-        # Получаем случайного противника
         async with get_session() as session:
+            old_battles = await session.execute(
+                select(Battles)
+                .where(and_(Battles.vk_id == player.vk_id, Battles.status == True))
+            )
+            old_battles_list = old_battles.scalars().all()
+            for old_battle in old_battles_list:
+                old_battle.status = False
+            
             result = await session.execute(select(Monsters))
             monsters = result.scalars().all()
             
@@ -478,22 +479,36 @@ class BattleService:
                 logger.error("Противников в БД не найдено")
                 return None, False
             
-            monster = random.choice(monsters)
+            is_boss = False
+            try:
+                is_boss = await DungeonService.is_boss_room(dungeon)
+            except Exception:
+                is_boss = False
+
+            if is_boss:
+                monster, ok_mon = await UserService.get_random_boss()
+                power_percent = random.uniform(0.95, 1.30)
+            else:
+                monster, ok_mon = await UserService.get_random_monster()
+                power_percent = random.uniform(0.75, 0.95)
+
+            if not ok_mon or not monster:
+                logger.error("Не удалось выбрать монстра для боя")
+                return None, False
+
+            enemy_health = max(25, int(player.max_health * power_percent))
+            enemy_attack = max(8, int(player_stats["attack"] * power_percent))
+            enemy_protection = max(5, int(player_stats["protection"] * power_percent))
             
-            # Рассчитываем характеристики врага на основе игрока
-            enemy_health = max(20, int(player.max_health * 0.8))
-            enemy_attack = max(5, int(player.attack * 0.7))
-            enemy_protection = max(3, int(player.protection * 0.6))
-            
-            # Получаем зелья игрока для клавиатуры
             potions = await BattleService.get_player_potions(player)
             
             battle_state = {
-                "enemy_name": monster_name,
+                "enemy_name": monster.name,
                 "enemy_health": enemy_health,
                 "enemy_max_health": enemy_health,
                 "enemy_attack": enemy_attack,
                 "enemy_protection": enemy_protection,
+                "enemy_power_percent": int(power_percent * 100),
                 "enemy_stance": "normal",
                 "player_health": player.health,
                 "player_max_health": player.max_health,
@@ -502,7 +517,7 @@ class BattleService:
                 "round": 1,
                 "last_action": None,
                 "combat_log": [],
-                "player_potions": [{"index": p["index"], "name": p["name"]} for p in potions[:5]],
+                "player_potions": [{"index": p["index"], "name": p.get("display_name", p["name"])} for p in potions[:5]],
             }
             
             battle = Battles(
@@ -516,52 +531,50 @@ class BattleService:
             await session.refresh(battle)
             
             logger.info(
-                "Бой создан: id={}, враг={}, игрок_hp={}, враг_hp={}",
-                battle.id, monster.name, player.health, enemy_health
+                "Бой создан: id={}, враг={}, игрок_hp={}, враг_hp={}, враг_атака={}",
+                battle.id, monster.name, player.health, enemy_health, enemy_attack
             )
             
             return battle, True
     
     @staticmethod
     async def get_active_battle(vk_id: int) -> tuple[Battles, bool]:
-        """Получает активный бой игрока"""
         async with get_session() as session:
             result = await session.execute(
                 select(Battles)
                 .where(and_(Battles.vk_id == vk_id, Battles.status == True))
                 .order_by(Battles.created_at.desc())
             )
-            battle = result.scalar_one_or_none()
+            battle = result.first()
+            if battle:
+                battle = battle[0]
             return battle, battle is not None
     
     @staticmethod
-    async def calculate_damage(attacker_attack: int, defender_protection: int, 
-                              attacker_stance: str = "normal", 
-                              defender_stance: str = "normal") -> int:
-        """
-        Расчет урона с учетом броней и стойки
-        - Удар: урон = атака * 1.0
-        - Защита у защищающегося: броня * 2
-        """
-        base_damage = max(1, attacker_attack - (defender_protection * 2 if defender_stance == "defend" else defender_protection))
-        
-        # Добавляем случайное отклонение ±15%
+    async def calculate_damage(attacker_attack: int, defender_protection: int, attacker_stance: str = "normal", defender_stance: str = "normal") -> int:
+
+        effective_protection = defender_protection * 2.0 if defender_stance == "defend" else defender_protection
+        scaling_k = 35.0
+        reduction_factor = effective_protection / (effective_protection + scaling_k)
+        base_damage = attacker_attack * (1.0 - reduction_factor)
         variation = random.uniform(0.85, 1.15)
         final_damage = int(base_damage * variation)
+        min_damage = max(1, int(attacker_attack * 0.10))
+        
+        calculated_result = max(min_damage, final_damage)
         
         logger.debug(
-            "Расчет урона: атака={}, защита={}, стойка_защиты={}, урон={}",
-            attacker_attack, defender_protection, defender_stance, final_damage
+            "Расчет урона: атака={}, защита={}, поглощение={:.1%}, итоговый урон={}",
+            attacker_attack, defender_protection, reduction_factor, calculated_result
         )
         
-        return max(1, final_damage)
+        return calculated_result
     
     @staticmethod
     async def player_action(battle: Battles, player: Players, action: str, potion_index: int = None) -> tuple[Battles, bool, str]:
-        """
-        Обработка действия игрока
-        action: "attack" | "defend" | "potion"
-        """
+        
+        from database.service.user import UserService
+
         if battle.state["turn"] != "player":
             return battle, False, "Не ваш ход"
         
@@ -570,66 +583,130 @@ class BattleService:
         
         async with get_session() as session:
             if action == "attack":
-                # Удар игрока
+                player_stats = await UserService.get_effective_stats(player)
+                player_stats = BattleService.apply_battle_buffs(player_stats, state)
+                
                 damage = await BattleService.calculate_damage(
-                    attacker_attack=player.attack,
+                    attacker_attack=player_stats["attack"],
                     defender_protection=state["enemy_protection"],
                     attacker_stance="normal",
                     defender_stance=state["enemy_stance"]
                 )
                 
                 state["enemy_health"] -= damage
-                state["last_action"] = f"Вы нанесли удар! Урон: {damage}"
-                message = f"⚔️ Вы ударили {state['enemy_name']} на {damage} урона!"
+                state["last_action"] = f"Вы нанесли удар, урон: {damage}"
+                message = f"Вы ударили {state["enemy_name"]} на {damage} урона"
                 
                 logger.info("Игрок vk_id={} атаковал, урон={}", player.vk_id, damage)
                 
             elif action == "defend":
-                # Защита игрока
                 state["player_stance"] = "defend"
                 state["last_action"] = "Вы заняли оборонительную стойку"
-                message = "🛡️ Вы заняли оборонительную стойку! Броня удвоена."
+                message = "Броня удвоена"
                 
                 logger.info("Игрок vk_id={} защищается", player.vk_id)
                 
             elif action == "potion":
-                # Использование зелья
                 if potion_index is None:
                     return battle, False, "Индекс зелья не указан"
-                
+
                 bag = player.inventory.get("bag", [])
                 if potion_index < 0 or potion_index >= len(bag):
                     return battle, False, "Неверный индекс зелья"
-                
+
                 item_code = bag[potion_index]
                 result = await session.execute(select(Items).where(Items.code == item_code))
                 item = result.scalar_one_or_none()
-                
+
                 if not item:
                     return battle, False, "Зелье не найдено"
+
+                stats = item.stats or {}
+                success = False
+                msg_detail = ""
+
+                if "heal" in stats or stats.get("effect") == "heal":
+                    heal_val = stats.get("heal", stats.get("value", 20))
+                    battle, success, msg_detail = await apply_combat_heal(battle, heal_val)
+                elif "stat" in stats and "modifier" in stats:
+                    stat_name = stats.get("stat")
+                    modifier = stats.get("modifier")
+                    duration = stats.get("duration", 3)
+                    
+                    battle, success, msg_detail = await apply_combat_buff(battle, stat_name, modifier, duration)
                 
-                # Применяем эффект зелья (восстановление здоровья)
+                if success:
+                    message = f"Вы использовали {item.name} и {msg_detail}"
+                    state["last_action"] = f"Выпил {item.name} ({msg_detail})"
+
+                    bag.pop(potion_index)
+                    player.inventory["bag"] = bag
+                    await session.merge(player)
+
+                    old_potions = state.get("player_potions", [])
+                    new_potions = []
+                    for p in old_potions:
+                        if p["index"] == potion_index:
+                            continue
+                        new_idx = p["index"] if p["index"] < potion_index else p["index"] - 1
+                        new_potions.append({"index": new_idx, "name": p["name"]})
+                    state["player_potions"] = new_potions
+                else:
+                    return battle, False, "Это зелье не подходит для использования в бою"
+                
+            elif action == "defend":
+                state["player_stance"] = "defend"
+                state["last_action"] = "Вы заняли оборонительную стойку"
+                message = "Броня удвоена"
+                
+                logger.info("Игрок vk_id={} защищается", player.vk_id)
+                
+            elif action == "potion":
+                if potion_index is None:
+                    return battle, False, "Индекс зелья не указан"
+
+                bag = player.inventory.get("bag", [])
+                if potion_index < 0 or potion_index >= len(bag):
+                    return battle, False, "Неверный индекс зелья"
+
+                item_code = bag[potion_index]
+                result = await session.execute(select(Items).where(Items.code == item_code))
+                item = result.scalar_one_or_none()
+
+                if not item:
+                    return battle, False, "Зелье не найдено"
+
                 if "effect" in item.stats and item.stats["effect"] == "heal":
                     heal_amount = item.stats.get("value", 20)
-                    state["player_health"] = min(state["player_max_health"], state["player_health"] + heal_amount)
-                    message = f"💊 Вы выпили {item.name} и восстановили {heal_amount} HP!"
-                    state["last_action"] = f"Выпил {item.name} (+{heal_amount} HP)"
-                    
-                    # Удаляем зелье из сумки
+                    old_hp = state["player_health"]
+                    state["player_health"] = min(
+                        state["player_max_health"], state["player_health"] + heal_amount
+                    )
+                    actual_heal = state["player_health"] - old_hp
+                    message = f"Вы выпили {item.name} и восстановили {actual_heal} здоровья"
+                    state["last_action"] = f"Выпил {item.name} (+{actual_heal} HP)"
+
                     bag.pop(potion_index)
                     player.inventory["bag"] = bag
                     merged_player = await session.merge(player)
-                    await session.commit()
-                    
+
+                    old_potions = state.get("player_potions", [])
+                    new_potions = []
+                    for p in old_potions:
+                        if p["index"] == potion_index:
+                            continue
+                        new_idx = p["index"] if p["index"] < potion_index else p["index"] - 1
+                        new_potions.append({"index": new_idx, "name": p["name"]})
+                    state["player_potions"] = new_potions
+
                     logger.info("Игрок vk_id={} использовал {}", player.vk_id, item.code)
                 else:
                     return battle, False, "Это зелье не лечит"
             
-            # Проверяем победу
             if state["enemy_health"] <= 0:
                 state["status"] = "won"
                 state["turn"] = "end"
-                message += "\n\n🎉 Вы победили врага!"
+                message += "\n\nВы победили врага"
                 logger.info("Игрок vk_id={} победил {}", player.vk_id, state["enemy_name"])
                 
                 player.health = state["player_health"]
@@ -641,9 +718,8 @@ class BattleService:
                 
                 return merged_battle, True, message
             
-            # Передаём ход врагу
             state["turn"] = "enemy"
-            state["player_stance"] = "normal"  # Сброс стойки после каждого хода
+            state["player_stance"] = "normal"
             
             merged_battle = await session.merge(battle)
             flag_modified(merged_battle, "state")
@@ -654,49 +730,56 @@ class BattleService:
     
     @staticmethod
     async def enemy_action(battle: Battles, player: Players) -> tuple[Battles, str]:
-        """Автоматическое действие противника"""
+
+        from database.service.user import UserService
+
         state = battle.state
-        
-        # Враг выбирает действие: 70% атака, 30% защита
         action = "attack" if random.random() < 0.7 else "defend"
         message = ""
         
         async with get_session() as session:
             player = await session.merge(player)
+            player_stats = await UserService.get_effective_stats(player)
+            player_stats = BattleService.apply_battle_buffs(player_stats, state)
             
             if action == "attack":
                 damage = await BattleService.calculate_damage(
                     attacker_attack=state["enemy_attack"],
-                    defender_protection=player.protection,
+                    defender_protection=player_stats["protection"],
                     attacker_stance="normal",
                     defender_stance=state["player_stance"]
                 )
                 
                 state["player_health"] -= damage
-                message = f"⚔️ {state['enemy_name']} атакует вас! Урон: {damage}"
-                state["last_action"] = f"{state['enemy_name']} атакует! Урон: {damage}"
+                message = f"{state["enemy_name"]} атакует вас, урон: {damage}"
+                state["last_action"] = f"{state["enemy_name"]} атакует, урон: {damage}"
                 
                 logger.info("Враг {} атаковал, урон={}", state["enemy_name"], damage)
                 
-            else:  # defend
+            else:
                 state["enemy_stance"] = "defend"
-                message = f"🛡️ {state['enemy_name']} занимает оборонительную стойку!"
-                state["last_action"] = f"{state['enemy_name']} защищается"
+                message = f"{state["enemy_name"]} занимает оборонительную стойку"
+                state["last_action"] = f"{state["enemy_name"]} защищается"
                 
                 logger.info("Враг {} защищается", state["enemy_name"])
             
             player.health = max(0, state["player_health"])
             
-            # Проверяем поражение
             if state["player_health"] <= 0:
                 state["status"] = "lost"
                 state["turn"] = "end"
-                message += f"\n\n💀 Вы повержены {state['enemy_name']}!"
-                logger.info("Игрок vk_id={} погиб в бою", battle.vk_id)
+                message += f"\n\nВы повержены {state["enemy_name"]}"
             else:
-                # Передаём ход игроку
                 state["turn"] = "player"
-                state["enemy_stance"] = "normal"  # Сброс стойки
+                state["enemy_stance"] = "normal"
+                
+                state["round"] = state.get("round", 1) + 1
+                active_buffs = []
+                for buff in state.get("player_buffs", []):
+                    buff["duration"] = buff.get("duration", 1) - 1
+                    if buff["duration"] > 0:
+                        active_buffs.append(buff)
+                state["player_buffs"] = active_buffs
             
             merged_battle = await session.merge(battle)
             flag_modified(merged_battle, "state")
@@ -707,7 +790,6 @@ class BattleService:
     
     @staticmethod
     async def end_battle(battle: Battles) -> Battles:
-        """Завершить бой"""
         async with get_session() as session:
             battle.status = False
             merged = await session.merge(battle)
@@ -719,8 +801,7 @@ class BattleService:
     
     @staticmethod
     async def get_player_potions(player: Players) -> list[dict]:
-        """Получить список зелий в инвентаре игрока"""
-        potions = []
+        potions_map = {}  # {item_code: {"data": {. . .}, "count": 0, "indices": []}}
         bag = player.inventory.get("bag", [])
         
         async with get_session() as session:
@@ -729,12 +810,36 @@ class BattleService:
                 item = result.scalar_one_or_none()
                 
                 if item and item.type == "potion":
-                    potions.append({
-                        "index": idx,
-                        "code": item_code,
-                        "name": item.name,
-                        "effect": item.stats.get("effect"),
-                        "value": item.stats.get("value"),
-                    })
+                    if item_code not in potions_map:
+                        potions_map[item_code] = {
+                            "code": item_code,
+                            "name": item.name,
+                            "effect": item.stats.get("effect"),
+                            "value": item.stats.get("value"),
+                            "count": 0,
+                            "indices": []
+                        }
+                    potions_map[item_code]["count"] += 1
+                    potions_map[item_code]["indices"].append(idx)
+        
+        potions = []
+        for item_code, potion_data in potions_map.items():
+            potion_display = potion_data.copy()
+            potion_display["index"] = potion_data["indices"][0]
+            if potion_data["count"] > 1:
+                potion_display["display_name"] = f"{potion_data["name"]} (x{potion_data["count"]})"
+            else:
+                potion_display["display_name"] = potion_data["name"]
+            potions.append(potion_display)
         
         return potions
+    
+    @staticmethod
+    def apply_battle_buffs(stats: dict, state: dict) -> dict:
+        boosted = stats.copy()
+        for buff in state.get("player_buffs", []):
+            stat = buff.get("stat")
+            modifier = buff.get("modifier", 0)
+            if stat in boosted:
+                boosted[stat] += modifier
+        return boosted

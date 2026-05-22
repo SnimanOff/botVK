@@ -5,10 +5,6 @@ from loguru import logger
 
 
 class UserCheckMiddleware(BaseMiddleware[Message]):
-    """
-    Создаёт профиль игрока если его нет, срабатывает перед каждым сообщением
-    """
-    
     async def pre(self):
         vk_id = self.event.from_id
         player = await UserService.GoC_user(vk_id)

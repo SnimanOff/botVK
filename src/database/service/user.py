@@ -12,14 +12,6 @@ class UserService:
     
     @staticmethod
     async def GoC_user(vk_id: int) -> Players:
-        """
-        get or create user 
-        
-        Ищет профиль пользователя в базе данных по vk_id
-        При ненаходе создаёт профиль 
-        
-        Возвращает модель игрока
-        """
         async with get_session() as session:
             result = await session.execute(
                 select(Players)
@@ -29,6 +21,7 @@ class UserService:
             
             if player:
                 logger.debug("Игрок vk_id={} уже существует, id={}", player.vk_id, player.id)
+                await session.refresh(player)
                 return player
             
             player = Players(
@@ -44,13 +37,6 @@ class UserService:
         
     @staticmethod
     async def get_item(code: str) -> tuple[Items | None, bool]:
-        """
-        get item 
-
-        Получение предмета из SQL бд
-
-        Возвращает модель предмета и результат операции
-        """
         async with get_session() as session:
             result = await session.execute(
                 select(Items)
@@ -69,13 +55,6 @@ class UserService:
 
     @staticmethod
     async def give_item(player: Players, item_code: str) -> tuple[Players, bool]:
-        """
-        give item
-
-        Выдача предмета по модели и коду предмета
-
-        Возвращает или изменённое или неизменённый профиль и результат операции
-        """
         async with get_session() as session:
             item, success = await UserService.get_item(item_code)
 
@@ -105,11 +84,6 @@ class UserService:
         
     @staticmethod
     async def GP_item(player: Players, slot: str) -> tuple[str, bool]:
-        """
-        get player item 
-        
-        Возвращает предмет в передаваемом слоте и результат операции
-        """
         code = player.inventory.get(slot)
         
         if not code: 
@@ -121,11 +95,6 @@ class UserService:
     
     @staticmethod
     async def get_paths(location_id: int) -> list[list | None, bool]:
-        """
-        get paths 
-        
-        Возвращает список локаций куда можно попасть и результат операции
-        """
         async with get_session() as session:
             result = await session.execute(
                 select(Locations)
@@ -142,14 +111,6 @@ class UserService:
         
     @staticmethod
     async def player_move(player: Players, move: int) -> tuple[Players, bool]:
-        """
-        player move 
-        
-        Метод получая модель игрока и ход, проверяет возможность хода
-        После чего если ход возможен перемещает игрока
-        
-        Возвращает модель игрока и результат операции
-        """
         async with get_session() as session:
             result = await session.execute(
                 select(Players).where(Players.id == player.id)
@@ -182,13 +143,6 @@ class UserService:
         
     @staticmethod
     async def Go_items(player: Players, item_type: str) -> tuple[list[str], bool]:
-        """
-        get other items
-        
-        Получает все предметы не принадлежащие игроку
-        
-        возвращает список (list) предметов и результат операции
-        """
         async with get_session() as session:
             player_codes = set()
             
@@ -221,13 +175,6 @@ class UserService:
     
     @staticmethod
     async def get_location(location_id: int) -> tuple[Locations, bool]:
-        """
-        get location
-        
-        Получает локацию по id
-        
-        Возвращает локацию и результат операции
-        """
         async with get_session() as session:
             try:
                 result = await session.execute(
@@ -242,13 +189,6 @@ class UserService:
                 
     @staticmethod
     async def enter_dungeon(player: Players) -> tuple[Players, bool]:
-        """
-        enter dungeon 
-        
-        Запускает пользователя в данж при выполнении условий
-        
-        Возвращает модель игрока и результат операции
-        """
         player_location = player.location_id
         enter_location = settings.DUNGEON_LOCATION
 
@@ -275,13 +215,6 @@ class UserService:
         
     @staticmethod
     async def exit_dungeon(player: Players) -> tuple[Players, bool]:
-        """
-        exit dungeon 
-        
-        Выпускает пользователя из данжа при выполнении условий
-        
-        Возвращает модель игрока и результат операции
-        """
         dungeon, ok = await UserService.get_active_dungeon(player.vk_id)
         if not ok:
             logger.warning("Игрок {} не в данже", player.id)
@@ -301,13 +234,6 @@ class UserService:
     
     @staticmethod
     async def remove_item(player: Players, slot: str) -> tuple[Players, bool]:
-        """
-        remove item
-        
-        Удаляет предмет из указанного слота или сумки по индексу
-        
-        Возвращает модель игрока и результат операции
-        """
         async with get_session() as session:
             player = await session.merge(player)
             inventory = player.inventory
@@ -335,13 +261,6 @@ class UserService:
 
     @staticmethod
     async def remove_from_bag(player: Players, index: int) -> tuple[Players, bool]:
-        """
-        remove from bag
-        
-        Удаляет предмет из сумки по индексу
-        
-        Возвращает модель игрока и результат операции
-        """
         async with get_session() as session:
             player = await session.merge(player)
             bag = player.inventory.get("bag", [])
@@ -362,13 +281,6 @@ class UserService:
     
     @staticmethod
     async def use_item(player: Players, index: int) -> tuple[Players, bool]:
-        """
-        use item
-        
-        применение предметов игроком
-        
-        Возвращает модель игрока и результат операции
-        """
         bag = player.inventory.get("bag", [])
         if index < 0 or index >= len(bag):
             return player, False
@@ -412,20 +324,32 @@ class UserService:
                 await session.refresh(merged)
                 return merged, True
         else:
-            effect_name = stats.get("effect")
-            value = stats.get("value")
-            effect_func = EFFECTS.get(effect_name)
-            
+            effect_func = None
+            value = None
+
+            if "effect" in stats and "value" in stats:
+                effect_func = EFFECTS.get(stats.get("effect"))
+                value = stats.get("value")
+            elif "heal" in stats:
+                effect_func = EFFECTS.get("heal")
+                value = stats.get("heal")
+            else:
+                for k in stats.keys():
+                    if k in EFFECTS:
+                        effect_func = EFFECTS.get(k)
+                        value = stats.get(k)
+                        break
+
             if not effect_func:
                 return player, False
+
             player, ok = await effect_func(player, value)
-            
             if not ok:
                 return player, False
-            
+
             bag.pop(index)
             player.inventory["bag"] = bag
-            
+
             async with get_session() as session:
                 merged = await session.merge(player)
                 flag_modified(merged, "inventory")
@@ -435,13 +359,6 @@ class UserService:
     
     @staticmethod
     async def add_balance(player: Players, amount: int) -> tuple[Players, bool]:
-        """
-        add balance
-        
-        Увеличивает баланс игрока
-        
-        Возвращает модель игрока и результат выполнения
-        """
         if amount <= 0:
             logger.debug("Сумма {} не положительна", amount)
             return player, False
@@ -456,13 +373,6 @@ class UserService:
 
     @staticmethod
     async def buy_item(player: Players, item_code: str) -> tuple[Players, bool]:
-        """
-        buy item
-        
-        покупка предмета игроком, проверяет, хватает ли у игрока денег
-        
-        Возвращает модель игрока и результат операции    
-        """
         item, ok = await UserService.get_item(item_code)
         
         if not ok:
@@ -510,13 +420,6 @@ class UserService:
     
     @staticmethod
     async def get_total_stats(player: Players) -> dict:
-        """
-        get total stats
-        
-        считает статистику игрока учитывая, кольца, броню, меч . . .
-        
-        возвращает все статы игрока в dict формате    
-        """
         stats = {
             "health": player.health,
             "max_health": player.max_health,
@@ -537,15 +440,7 @@ class UserService:
 
     @staticmethod
     async def get_equipment_price(player: Players) -> int:
-        """
-        get equipment 
-        
-        считает общую цену всех предметов игрока
-        
-        возвращает число
-        """
         total = 0
-        
         for slot in ["weapon", "armor", "ring"]:
             item_code = player.inventory.get(slot)
             if item_code:
@@ -575,10 +470,17 @@ class UserService:
             "name": "Вход",
             "description": "Тяжёлые ворота захлопнулись за спиной. Перед тобой тёмный коридор.",
         })
+
         rooms["7,1"].update({
             "type": "exit",
             "name": "Выход",
             "description": "Лучи света пробиваются сквозь трещины. Свобода близко.",
+        })
+
+        rooms["6,1"].update({
+            "type": "boss",
+            "name": "Логово босса",
+            "description": "Воздух густеет от зловония...",
         })
         
         candidates = [x for x in range(2, 7)]
@@ -626,6 +528,11 @@ class UserService:
                     if ok:
                         room["monster_code"] = monster.code
                         room["monster_name"] = monster.name
+                elif room["type"] == "boss":
+                    monster, ok = await UserService.get_random_boss()
+                    if ok and monster:
+                        room["monster_code"] = monster.code
+                        room["monster_name"] = monster.name
 
             dungeon = Dungeons(
                 vk_id=player.vk_id,
@@ -647,9 +554,8 @@ class UserService:
         if not room:
             return {"message": "Вы в пустоте.", "type": "empty"}
 
-        msg = f"📍 {room['name']}\n{room['description']}"
+        msg = f"{room["name"]}\n{room["description"]}"
         if room["type"] in ("combat", "boss") and not room.get("cleared"):
-            # Получаем случайного противника
             async with get_session() as session:
                 result = await session.execute(select(Monsters))
                 monsters = result.scalars().all()
@@ -691,6 +597,22 @@ class UserService:
             if not monsters:
                 return None, False
             return random.choice(monsters), True
+
+    @staticmethod
+    async def get_random_boss() -> tuple[Monsters | None, bool]:
+        async with get_session() as session:
+            result = await session.execute(
+                select(Monsters).where(Monsters.rarity.in_(["rare", "epic", "legendary"]))
+            )
+            bosses = result.scalars().all()
+            if bosses:
+                return random.choice(bosses), True
+
+            result = await session.execute(select(Monsters))
+            all_monsters = result.scalars().all()
+            if not all_monsters:
+                return None, False
+            return random.choice(all_monsters), True
 
     @staticmethod
     async def move_in_dungeon(dungeon: Dungeons, new_x: int, new_y: int) -> tuple[Dungeons, bool, str]:
@@ -813,3 +735,63 @@ class UserService:
             merged = await session.merge(dungeon)
             flag_modified(merged, "map_data")
             await session.commit()
+    
+    @staticmethod
+    async def get_effective_stats(player: Players) -> dict:
+        attack = player.attack
+        protection = player.protection
+        weapon_code = player.inventory.get("weapon")
+
+        if weapon_code:
+            weapon, ok = await UserService.get_item(weapon_code)
+            if ok and weapon.stats:
+                damage_bonus = weapon.stats.get("damage", 0)
+                attack += damage_bonus
+                logger.debug(
+                    "Бонус атаки от оружия {}: +{}",
+                    weapon_code, damage_bonus
+                )
+        
+        armor_code = player.inventory.get("armor")
+        if armor_code:
+            armor, ok = await UserService.get_item(armor_code)
+            if ok and armor.stats:
+                defense_percent = armor.stats.get("defense_percent", 0)
+                protection = int(protection * (1 + defense_percent / 100))
+                logger.debug(
+                    "Бонус защиты от брони {}: +{}% (итого: {})",
+                    armor_code, defense_percent, protection
+                )
+        
+        ring_code = player.inventory.get("ring")
+        if ring_code:
+            ring, ok = await UserService.get_item(ring_code)
+            if ok and ring.stats:
+                if "attack" in ring.stats:
+                    attack_bonus = ring.stats.get("attack", 0)
+                    attack += attack_bonus
+                if "protection" in ring.stats:
+                    prot_bonus = ring.stats.get("protection", 0)
+                    protection += prot_bonus
+                logger.debug(
+                    "Бонусы от кольца {}: атака +{}, защита +{}",
+                    ring_code, 
+                    ring.stats.get("attack", 0),
+                    ring.stats.get("protection", 0)
+                )
+        
+        return {
+            "attack": max(1, attack),
+            "protection": max(1, protection)
+        }
+    
+    @staticmethod
+    async def get_total_stats(player: Players) -> dict:
+        stats = await UserService.get_effective_stats(player)
+        return {
+            "health": player.health,
+            "max_health": player.max_health,
+            "attack": stats["attack"],
+            "protection": stats["protection"],
+            "balance": player.balance
+        }

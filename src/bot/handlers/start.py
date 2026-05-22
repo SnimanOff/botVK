@@ -33,8 +33,8 @@ async def start_handler(message: Message):
     keyboard = await build_move_keyboard(loc_id)
     await message.answer(
         f"Добро пожаловать!\n"
-        f"Локация: {loc_id}\n"
-        f"HP: {player.health}/{player.max_health}\n"
-        f"💰 {player.balance} монет",
+        f"Локация {loc_id}\n"
+        f"Здоровье {player.health}/{player.max_health}\n"
+        f"Баланс {player.balance} монет",
         keyboard=keyboard
     )

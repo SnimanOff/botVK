@@ -12,13 +12,6 @@ class ShopService:
     
     @staticmethod
     async def GA_items(player: Players, category: str)-> tuple[list[dict], bool]:
-        """
-        get all items
-        
-        получает все предметы категории собирая коды экипировки
-        
-        возвращает список всех предметов (list[dict]) и результат операции 
-        """
         player_codes = set()
         if category in ["weapon", "armor", "ring"]:
             equipped = player.inventory.get(category)
@@ -48,39 +41,24 @@ class ShopService:
 
     @staticmethod
     async def buy_item(player: Players, item_code: str) -> tuple[Players, str, bool]:
-        """
-        buy item 
-        
-        финальная логика покупки предмета игроков, использующая метод UserService
-        
-        возвращает модель игрока, строку-результат, булевый результат операции 
-        """
-        
         item, ok = await UserService.get_item(item_code)
         if not ok:
-            return player, "❌ Предмет не найден", False
+            return player, "Предмет не найден", False
         
         if item.type in ["weapon", "armor", "ring"]:
             current = player.inventory.get(item.type)
             if current == item_code:
-                return player, "❌ У вас уже экипирован этот предмет", False
+                return player, "У вас уже экипирован этот предмет", False
             
         updated_player, ok = await UserService.buy_item(player, item_code)
         
         if not ok:
             if player.balance < item.price:
-                return player, f"❌ Недостаточно монет ({player.balance}/{item.price}💰)", False
-            return player, "❌ Не удалось купить предмет", False
+                return player, f"Недостаточно монет ({player.balance}/{item.price})", False
+            return player, "Не удалось купить предмет", False
         
-        return updated_player, f"✅ Куплено: {item.name} за {item.price}💰", True
+        return updated_player, f"Куплено: {item.name} за {item.price}", True
     
     @staticmethod
     def get_category_name(category: str) -> str:
-        """
-        get category name
-        
-        Получает название категории
-        
-        возвращает строку
-        """
         return ShopService.CATEGORIES.get(category, category)

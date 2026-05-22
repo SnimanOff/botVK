@@ -8,13 +8,13 @@ DATABASE = settings.DATABASE
 
 engine = create_async_engine(
     DATABASE, 
-    echo=True
+    echo=False,
 )
 
 AsyncSessionMaker = async_sessionmaker(
     engine,
     class_=AsyncSession,
-    expire_on_commit=False,   # <-- важно для async
+    expire_on_commit=False,
     autoflush=False,
 )
 

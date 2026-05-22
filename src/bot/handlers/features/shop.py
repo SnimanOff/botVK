@@ -21,7 +21,7 @@ def shop_main_kb() -> str:
         keyboard.row()
     
     keyboard.add(
-        Callback("🔙 Назад", payload={"cmd": "feature", "id": "back_to_location"}),
+        Callback("Назад", payload={"cmd": "feature", "id": "back_to_location"}),
         color=KeyboardButtonColor.SECONDARY
     )
     
@@ -32,7 +32,7 @@ def shop_category_kb(items: list[dict], player_balance: int) -> str:
     keyboard = Keyboard(inline=True)
     
     for item in items:
-        label = f"{item['name']} — {item['price']}💰"
+        label = f"{item['name']} - {item['price']}"
         keyboard.add(
             Callback(
                 label,
@@ -43,7 +43,7 @@ def shop_category_kb(items: list[dict], player_balance: int) -> str:
         keyboard.row()
     
     keyboard.add(
-        Callback("🔙 К категориям", payload={"cmd": "feature", "id": "shop"}),
+        Callback("К категориям", payload={"cmd": "feature", "id": "shop"}),
         color=KeyboardButtonColor.SECONDARY
     )
     
@@ -55,14 +55,14 @@ def shop_confirm_kb(item_code: str, category: str) -> str:
     
     keyboard.add(
         Callback(
-            "✅ Купить",
+            "Купить",
             payload={"cmd": "shop_confirm", "item_code": item_code, "category": category}
         ),
         color=KeyboardButtonColor.POSITIVE
     )
     keyboard.add(
         Callback(
-            "❌ Отмена",
+            "Отмена",
             payload={"cmd": "shop_category", "category": category}
         ),
         color=KeyboardButtonColor.NEGATIVE
@@ -76,15 +76,15 @@ async def shop_open(event, player):
     await event.ctx_api.messages.send(
         peer_id=event.object.peer_id,
         message=(
-            f"🏪 Добро пожаловать в магазин!\n"
-            f"💰 Ваш баланс: {player.balance} монет\n\n"
-            f"Выберите категорию:"
+            f"Добро пожаловать в магазин\n"
+            f"Баланс {player.balance} монет\n\n"
+            f"Выберите категорию"
         ),
         keyboard=keyboard,
         random_id=0
     )
     logger.debug("Вызвано открытие магазина пользователем: {}", event.object.peer_id)
-    await snackbar(event, "🏪 Магазин открыт")
+    await snackbar(event, "Магазин открыт")
     await delete(event)
     
 
@@ -96,13 +96,13 @@ async def shop_category(event, player, payload):
     
     if not ok or not items:
         keyboard = shop_main_kb()
-        message = f"🏪 {category_name}\n\n😕 В этой категории нет доступных товаров"
+        message = f"{category_name}\n\nВ этой категории нет доступных товаров"
         logger.debug("Пользователь: {} не имеет доступных товаров", event.object.peer_id)
     else:
         keyboard = shop_category_kb(items, player.balance)
         message = (
-            f"🏪 {category_name}\n"
-            f"💰 Баланс: {player.balance} монет\n\n"
+            f"{category_name}\n"
+            f"Баланс: {player.balance} монет\n\n"
             f"Доступно {len(items)} товаров:"
         )
         
@@ -116,7 +116,7 @@ async def shop_category(event, player, payload):
     logger.debug("Пользователь: {} успешно открыл категорию: {}", event.object.peer_id, category_name)
     
     await delete(event)
-    await snackbar(event, f"📂 {category_name}")
+    await snackbar(event, f"{category_name}")
 
 
 async def shop_buy(event, player, payload):
@@ -125,7 +125,7 @@ async def shop_buy(event, player, payload):
     
     item, ok = await UserService.get_item(item_code)
     if not ok:
-        await snackbar(event, "❌ Предмет не найден")
+        await snackbar(event, "Предмет не найден")
         logger.debug("Пользователь: {} попытался купить несуществующий предмет: {}", event.object.peer_id, item_code)
         return
     
@@ -134,10 +134,10 @@ async def shop_buy(event, player, payload):
     await event.ctx_api.messages.send(
         peer_id=event.object.peer_id,
         message=(
-            f"🛒 Покупка: {item.name}\n"
-            f"💰 Цена: {item.price} монет\n"
-            f"📊 Баланс после: {player.balance - item.price} монет\n\n"
-            f"Подтвердите покупку:"
+            f"Покупка {item.name}\n"
+            f"Цена {item.price} монет\n"
+            f"Баланс после покупки: {player.balance - item.price} монет\n\n"
+            f"Подтвердите покупку"
         ),
         keyboard=keyboard,
         random_id=0
@@ -175,9 +175,9 @@ async def back_to_location(event, player):
     await event.ctx_api.messages.send(
         peer_id=event.object.peer_id,
         message=(
-            f"📍 {loc_name}\n"
-            f"❤️ HP: {player.health}/{player.max_health}\n"
-            f"💰 {player.balance} монет"
+            f"{loc_name}\n"
+            f"Здоровье {player.health}/{player.max_health}\n"
+            f"Баланс {player.balance} монет"
         ),
         keyboard=keyboard,
         random_id=0
@@ -186,7 +186,7 @@ async def back_to_location(event, player):
     logger.debug("Пользователь: {} вернулся к локациям", event.object.peer_id)
     
     await delete(event)
-    await snackbar(event, "🔙 Возврат к локации")
+    await snackbar(event, "К локациям")
 
 
 async def delete(event):
