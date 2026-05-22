@@ -81,7 +81,7 @@ class DungeonGenerator:
                 continue
             
             if roll <= chance:
-                room_type = cls._roll_room_type()
+                room_type = cls.roll_room_type()
                 rooms[str(y)] = {
                     "type": room_type,
                     "name": cls.ROOM_TYPES[room_type]["name"],
@@ -93,7 +93,7 @@ class DungeonGenerator:
                 logger.debug("Комната не создана (roll > chance)")
         
         if "1" not in rooms:
-            room_type = cls._roll_room_type()
+            room_type = cls.roll_room_type()
             rooms["1"] = {
                 "type": room_type,
                 "name": cls.ROOM_TYPES[room_type]["name"],
@@ -143,13 +143,13 @@ class DungeonGenerator:
         floors = {}
         
         for x in range(1, 8):
-            floor_rooms = cls._generate_floor(x)
+            floor_rooms = cls.generate_floor(x)
             floors[str(x)] = floor_rooms
         
         map_data = {
             "version": 1,
             "seed": random.randint(1000, 999999),
-            "floors": cls._calculate_exits(floors),
+            "floors": cls.calculate_exits(floors),
         }
         
         total_rooms = sum(len(f) for f in floors.values())
@@ -494,10 +494,10 @@ class BattleService:
 
             if is_boss:
                 monster, ok_mon = await UserService.get_random_boss()
-                power_percent = random.uniform(0.95, 1.30)
+                power_percent = random.uniform(0.75, 1.10)
             else:
                 monster, ok_mon = await UserService.get_random_monster()
-                power_percent = random.uniform(0.75, 0.95)
+                power_percent = random.uniform(0.55, 0.75)
 
             if not ok_mon or not monster:
                 logger.error("Не удалось выбрать монстра для боя")
@@ -564,7 +564,7 @@ class BattleService:
         scaling_k = 35.0
         reduction_factor = effective_protection / (effective_protection + scaling_k)
         base_damage = attacker_attack * (1.0 - reduction_factor)
-        variation = random.uniform(0.85, 1.15)
+        variation = random.uniform(0.75, 1.05)
         final_damage = int(base_damage * variation)
         min_damage = max(1, int(attacker_attack * 0.10))
         

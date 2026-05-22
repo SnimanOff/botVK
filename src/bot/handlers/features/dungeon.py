@@ -189,8 +189,11 @@ async def edit_message(event, text, keyboard=None):
     
     kwargs = {"peer_id": peer_id, "message": text, "random_id": 0}
     if keyboard:
-        kwargs["keyboard"] = keyboard.get_json()
-        logger.info("edit_message: kb_json={}", keyboard.get_json()[:200])
+        if isinstance(keyboard, str):
+            kwargs["keyboard"] = keyboard
+        else:
+            kwargs["keyboard"] = keyboard.get_json()
+        logger.info("edit_message: kb_json={}", kwargs["keyboard"][:200])
     
     try:
         result = await api.messages.send(**kwargs)
