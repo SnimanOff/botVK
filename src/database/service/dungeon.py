@@ -38,7 +38,7 @@ class DungeonGenerator:
     }
     
     @classmethod
-    def _roll_room_type(cls) -> str:
+    def roll_room_type(cls) -> str:
         roll = random.random()
         cumulative = 0.0
         logger.debug("Бросок типа комнаты, roll={:.4f}", roll)
@@ -52,7 +52,7 @@ class DungeonGenerator:
         return "combat"
     
     @classmethod
-    def _generate_floor(cls, x: int) -> dict:
+    def generate_floor(cls, x: int) -> dict:
         logger.debug("Генерация этажа x={}", x)
         rooms = {}
         
@@ -106,7 +106,7 @@ class DungeonGenerator:
         return rooms
     
     @classmethod
-    def _calculate_exits(cls, floors: dict) -> dict:
+    def calculate_exits(cls, floors: dict) -> dict:
         logger.debug("Расчёт связей между комнатами (линейный)")
         result = {}
         
@@ -294,7 +294,7 @@ class DungeonService:
         return floor.get("rooms", {}).get(str(y))
 
     @classmethod
-    def _calculate_exits(cls, floors: dict) -> dict:
+    def calculate_exits(cls, floors: dict) -> dict:
         logger.debug("Расчёт связей (линейный, только вперёд)")
         result = {}
         
@@ -434,24 +434,31 @@ class DungeonService:
     
     @staticmethod
     async def complete_dungeon(dungeon: Dungeons, success: bool = True) -> Dungeons:
+        
+        from sqlalchemy.orm import selectinload
+        
         async with get_session() as session:
-            dungeon = await session.merge(dungeon)
-            dungeon.active = False
-            if dungeon.player:
-                old_flag = dungeon.player.in_dungeon
-                dungeon.player.in_dungeon = False
-                logger.debug(
-                    "DungeonService: player.in_dungeon {} -> False для vk_id={}",
-                    old_flag, dungeon.vk_id
-                )
-            
-            await session.commit()
-            await session.refresh(dungeon)
-            
-            logger.info(
-                "Данж id={} завершён, vk_id={}, rooms_cleared={}",
-                dungeon.id, dungeon.vk_id, dungeon.rooms_cleared
+            result = await session.execute(
+                select(Dungeons)
+                .where(Dungeons.id == dungeon.id)
+                .options(selectinload(Dungeons.player))
             )
+            db_dungeon = result.scalar_one_or_none()
+            
+            if db_dungeon:
+                db_dungeon.active = False
+                if db_dungeon.player:
+                    old_flag = db_dungeon.player.in_dungeon
+                    db_dungeon.player.in_dungeon = False
+                    logger.debug(
+                        "DungeonService: player.in_dungeon {} -> False для vk_id={}",
+                        old_flag, db_dungeon.vk_id
+                    )
+                
+                await session.commit()
+                await session.refresh(db_dungeon)
+                return db_dungeon
+            
             return dungeon
 
 

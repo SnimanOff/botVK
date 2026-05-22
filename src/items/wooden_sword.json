@@ -1,0 +1,11 @@
+{
+  "code": "wooden_sword",
+  "name": "Wooden Sword",
+  "type": "weapon",
+  "slot": "weapon",
+  "stats": {
+    "damage": 8,
+    "stamina_cost": 5
+  },
+  "price": 30
+}

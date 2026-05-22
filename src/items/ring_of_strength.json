@@ -1,0 +1,10 @@
+{
+  "code": "ring_of_strength",
+  "name": "Ring of Strength",
+  "type": "ring",
+  "slot": "ring",
+  "stats": {
+    "damage": 10
+  },
+  "price": 120
+}

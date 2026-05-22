@@ -1,0 +1,10 @@
+{
+  "code": "ring_of_health",
+  "name": "Ring of Health",
+  "type": "ring",
+  "slot": "ring",
+  "stats": {
+    "health": 50
+  },
+  "price": 140
+}

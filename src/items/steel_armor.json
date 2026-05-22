@@ -1,0 +1,10 @@
+{
+  "code": "steel_armor",
+  "name": "Steel Armor",
+  "type": "armor",
+  "slot": "armor",
+  "stats": {
+    "defense_percent": 60
+  },
+  "price": 250
+}

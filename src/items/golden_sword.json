@@ -1,0 +1,11 @@
+{
+  "code": "golden_sword",
+  "name": "Golden Sword",
+  "type": "weapon",
+  "slot": "weapon",
+  "stats": {
+    "damage": 20,
+    "stamina_cost": 10
+  },
+  "price": 200
+}

@@ -1,0 +1,10 @@
+{
+  "code": "ring_of_armor",
+  "name": "Ring of Armor",
+  "type": "ring",
+  "slot": "ring",
+  "stats": {
+    "defense_percent": 15
+  },
+  "price": 100
+}

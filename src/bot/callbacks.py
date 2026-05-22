@@ -4,7 +4,7 @@ from loguru import logger
 from database.service.user import UserService
 from database.service.dungeon import BattleService
 
-from bot.handlers.move import handle_move
+from bot.handlers.features.move import handle_move
 from bot.handlers.features.shop import (
     shop_open,
     shop_category,

@@ -1,0 +1,10 @@
+{
+  "code": "golden_armor",
+  "name": "Golden Armor",
+  "type": "armor",
+  "slot": "armor",
+  "stats": {
+    "defense_percent": 50
+  },
+  "price": 150
+}

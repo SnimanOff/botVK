@@ -64,7 +64,7 @@ class CombatRoom(DungeonRoom):
             ),
         }
     
-    async def _get_random_monster(self) -> Monsters | None:
+    async def get_random_monster(self) -> Monsters | None:
         async with get_session() as session:
             result = await session.execute(select(Monsters))
             monsters = result.scalars().all()
@@ -74,7 +74,7 @@ class CombatRoom(DungeonRoom):
             
             return random.choice(monsters)
     
-    async def _create_battle(self, enemy: dict) -> Battles:
+    async def create_battle(self, enemy: dict) -> Battles:
         state = {
             "enemy": enemy,
             "player_hp": self.player.health,
@@ -107,7 +107,7 @@ class BossRoom(DungeonRoom):
         player_stats = await UserService.get_total_stats(self.player)
         power_roll = random.uniform(self.POWER_MIN, self.POWER_MAX)
         
-        monster = await self._get_boss_monster()
+        monster = await self.get_boss_monster()
         monster_name = monster.name if monster else "Неизвестный босс"
         
         enemy = {
@@ -141,7 +141,7 @@ class BossRoom(DungeonRoom):
             ),
         }
     
-    async def _get_boss_monster(self) -> Monsters | None:
+    async def get_boss_monster(self) -> Monsters | None:
         async with get_session() as session:
             result = await session.execute(
                 select(Monsters)
@@ -160,7 +160,7 @@ class BossRoom(DungeonRoom):
             
             return None
     
-    async def _create_battle(self, enemy: dict) -> Battles:
+    async def create_battle(self, enemy: dict) -> Battles:
         state = {
             "enemy": enemy,
             "player_hp": self.player.health,

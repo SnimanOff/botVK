@@ -3,10 +3,12 @@ from vkbottle import Callback, Keyboard, KeyboardButtonColor, GroupTypes
 from loguru import logger
 from database.service.user import UserService
 from database.service.dungeon import BattleService
-from bot.handlers.move import build_move_keyboard
+from bot.handlers.features.move import build_move_keyboard
 from settings import settings
 from database.service.dungeon import DungeonService 
 import random
+from database.core import get_session
+from sqlalchemy.orm.attributes import flag_modified
 
 async def snackbar(event, text):
     try:
@@ -227,6 +229,28 @@ async def shrine_use(event, player, payload):
     await edit_message(event, msg, kb)
 
 
+async def process_player_death(player):
+    """Сброс вещей, баланса игрока до 100 монет, исцеление и перенос на точку спавна"""
+    async with get_session() as session:
+        player = await session.merge(player)
+        
+        player.health = player.max_health
+        player.location_id = settings.HUB_LOCATION
+        player.balance = 100
+        player.in_dungeon = False
+        player.inventory = {
+            "weapon": None,
+            "armor": None,
+            "ring": None,
+            "bag": []
+        }
+        
+        flag_modified(player, "inventory")
+        await session.commit()
+        await session.refresh(player)
+        return player
+
+
 async def combat_action(event, player, payload):
     action = payload.get("action")
     potion_idx = payload.get("potion_idx")
@@ -239,9 +263,9 @@ async def combat_action(event, player, payload):
     if action == "stats":
         stats = await UserService.get_total_stats(player)
         msg = (
-            f"Характеристики"
-            f"Здоровье {stats["health"]}/{stats["max_health"]}"
-            f"Атака {stats["attack"]} Защита {stats["protection"]}"
+            f"Характеристики: "
+            f"Здоровье {stats["health"]}/{stats["max_health"]} | "
+            f"Атака {stats["attack"]} Защита {stats["protection"]} | "
             f"Баланс {player.balance}"
         )
         await snackbar(event, msg)
@@ -266,7 +290,13 @@ async def combat_action(event, player, payload):
                 msg += "\n\nДанж пройден"
                 await DungeonService.complete_dungeon(dung, success=True)
                 await BattleService.end_battle(battle)
-                await edit_message(event, msg)
+                
+                loc, ok = await UserService.get_location(player.location_id)
+                loc_name = loc.name if ok else f"Локация {player.location_id}"
+                move_kb = await build_move_keyboard(player.location_id)
+                
+                final_msg = f"{msg}\n\n{loc_name}\nЗдоровье {player.health}/{player.max_health}\nБаланс {player.balance} монет"
+                await edit_message(event, final_msg, move_kb)
                 return
             
             room = await DungeonService.get_current_room(dung)
@@ -281,8 +311,23 @@ async def combat_action(event, player, payload):
             if dung:
                 await DungeonService.complete_dungeon(dung, success=False)
             await BattleService.end_battle(battle)
-            msg += "\n\nПоражение"
-            await edit_message(event, msg)
+            
+            player = await process_player_death(player)
+            
+            loc, ok = await UserService.get_location(player.location_id)
+            loc_name = loc.name if ok else f"Локация {player.location_id}"
+            move_kb = await build_move_keyboard(player.location_id)
+            
+            death_msg = (
+                "Вы погибли в бою\n"
+                "Ваш дух воскресает у входа в город\n"
+                "Все ваши вещи из инвентаря и золото были утеряны в подземелье\n"
+                "Баланс установлен на 100 монет\n\n"
+                f"{loc_name}\n"
+                f"Здоровье {player.health}/{player.max_health}\n"
+                f"Баланс {player.balance} монет"
+            )
+            await edit_message(event, death_msg, move_kb)
             return
     
     battle, enemy_msg = await BattleService.enemy_action(battle, player)
@@ -293,7 +338,23 @@ async def combat_action(event, player, payload):
         if dung:
             await DungeonService.complete_dungeon(dung, success=False)
         await BattleService.end_battle(battle)
-        await edit_message(event, msg)
+        
+        player = await process_player_death(player)
+        
+        loc, ok = await UserService.get_location(player.location_id)
+        loc_name = loc.name if ok else f"Локация {player.location_id}"
+        move_kb = await build_move_keyboard(player.location_id)
+        
+        death_msg = (
+                "Вы погибли в бою\n"
+                "Ваш дух воскресает у входа в город\n"
+                "Все ваши вещи из инвентаря и золото были утеряны в подземелье\n"
+                "Баланс установлен на 100 монет\n\n"
+                f"{loc_name}\n"
+                f"Здоровье {player.health}/{player.max_health}\n"
+                f"Баланс {player.balance} монет"
+            )
+        await edit_message(event, death_msg, move_kb)
         return
     
     full_msg = format_battle_state(battle, extra_msg=msg)

@@ -1,0 +1,10 @@
+{
+  "code": "wooden_armor",
+  "name": "Wooden Armor",
+  "type": "armor",
+  "slot": "armor",
+  "stats": {
+    "defense_percent": 20
+  },
+  "price": 25
+}

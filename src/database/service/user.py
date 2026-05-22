@@ -456,7 +456,7 @@ class UserService:
         return total
     
     @staticmethod
-    def _generate_map() -> dict:
+    def generate_map() -> dict:
         rooms = {}
         for x in range(1, 8):
             rooms[f"{x},1"] = {

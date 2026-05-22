@@ -39,7 +39,7 @@ async def potions_open(event, player):
             keyboard=kb.get_json(),
             random_id=0,
         )
-        await _confirm_callback(event)
+        await confirm_callback(event)
         return
 
     for code, info in potions.items():
@@ -63,7 +63,7 @@ async def potions_open(event, player):
         keyboard=kb.get_json(),
         random_id=0,
     )
-    await _confirm_callback(event)
+    await confirm_callback(event)
 
     try:
         await event.ctx_api.messages.delete(
@@ -161,7 +161,7 @@ async def use_potion(event, player, payload):
     await edit_message(event, full_msg, kb)
 
 
-async def _confirm_callback(event):
+async def confirm_callback(event):
     try:
         await event.ctx_api.messages.send_message_event_answer(
             event_id=event.object.event_id,

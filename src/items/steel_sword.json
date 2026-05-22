@@ -1,0 +1,11 @@
+{
+  "code": "steel_sword",
+  "name": "Steel Sword",
+  "type": "weapon",
+  "slot": "weapon",
+  "stats": {
+    "damage": 25,
+    "stamina_cost": 12
+  },
+  "price": 350
+}
