@@ -726,7 +726,6 @@ class BattleService:
                 return merged_battle, True, message
             
             state["turn"] = "enemy"
-            state["player_stance"] = "normal"
             
             merged_battle = await session.merge(battle)
             flag_modified(merged_battle, "state")
@@ -779,7 +778,7 @@ class BattleService:
             else:
                 state["turn"] = "player"
                 state["enemy_stance"] = "normal"
-                
+                state["player_stance"] = "normal"
                 state["round"] = state.get("round", 1) + 1
                 active_buffs = []
                 for buff in state.get("player_buffs", []):
