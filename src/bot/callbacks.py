@@ -20,7 +20,9 @@ from bot.handlers.features.dungeon import (
     snackbar,
     treasure_open,
     shrine_use,
-    show_battle_state,
+    edit_message,
+    format_battle_state,
+    get_combat_kb,
 )
 from bot.handlers.features.potions import potions_open, use_potion
 
@@ -100,7 +102,19 @@ async def router(event: GroupTypes.MessageEvent):
                 )
             except Exception:
                 pass
-            await show_battle_state(event, battle)
+            
+            msg = format_battle_state(battle)
+            kb = get_combat_kb(battle)
+            await edit_message(event, msg, kb)
+            try:
+                await event.ctx_api.messages.send_message_event_answer(
+                    event_id=event.object.event_id,
+                    user_id=event.object.user_id,
+                    peer_id=event.object.peer_id,
+                    event_data={"type": "show_snackbar", "text": ""},
+                )
+            except Exception:
+                pass
         else:
             await back_to_location(event, player)
 

@@ -19,6 +19,16 @@ async def potions_open(event, player):
         await snackbar(event, "Зелья доступны только в бою.")
         return
 
+    await confirm_callback(event)
+    try:
+        await event.ctx_api.messages.delete(
+            peer_id=event.object.peer_id,
+            conversation_message_ids=[event.object.conversation_message_id],
+            delete_for_all=True,
+        )
+    except Exception:
+        pass
+
     bag = player.inventory.get("bag", [])
     potions = {}
     for code in bag:
@@ -39,7 +49,6 @@ async def potions_open(event, player):
             keyboard=kb.get_json(),
             random_id=0,
         )
-        await confirm_callback(event)
         return
 
     for code, info in potions.items():
@@ -63,16 +72,6 @@ async def potions_open(event, player):
         keyboard=kb.get_json(),
         random_id=0,
     )
-    await confirm_callback(event)
-
-    try:
-        await event.ctx_api.messages.delete(
-            peer_id=event.object.peer_id,
-            conversation_message_ids=[event.object.conversation_message_id],
-            delete_for_all=True,
-        )
-    except Exception:
-        pass
 
 
 async def use_potion(event, player, payload):
@@ -187,12 +186,7 @@ async def back_to_combat(event, player):
     except Exception:
         pass
     
-    full_msg = format_battle_state(battle)
+    msg = format_battle_state(battle)
     kb = get_combat_kb(battle)
-    
-    await event.ctx_api.messages.send(
-        peer_id=event.object.peer_id,
-        message=full_msg,
-        keyboard=kb.get_json(),
-        random_id=0
-    )
+    await edit_message(event, msg, kb)
+    await confirm_callback(event)

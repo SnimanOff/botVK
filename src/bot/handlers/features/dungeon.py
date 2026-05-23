@@ -365,47 +365,6 @@ async def combat_action(event, player, payload):
     await edit_message(event, full_msg, kb)
 
 
-async def show_battle_state(event, battle, action_message=""):
-    state = battle.state
-    player_bar = create_hp_bar(state["player_health"], state["player_max_health"])
-    enemy_bar = create_hp_bar(state["enemy_health"], state["enemy_max_health"])
-    
-    message = f"""
-Бой
-
-Вы
-{player_bar} {state["player_health"]}/{state["player_max_health"]} HP
-Стойка: {"Защита" if state["player_stance"] == "defend" else "Атака"}
-
-Враг
-{state["enemy_name"].upper()}
-{enemy_bar} {state["enemy_health"]}/{state["enemy_max_health"]} HP
-Стойка: {"Защита" if state["enemy_stance"] == "defend" else "Атака"}
-
-{"=" * 40}
-Раунд: {state["round"]}
-"""
-    
-    if action_message:
-        message += f"\n{action_message}\n"
-    
-    message += f"\n{"=" * 40}"
-    if state["turn"] == "player":
-        message += "\nВаш ход"
-    elif state["turn"] == "enemy":
-        message += "\nХод противника"
-    else:
-        message += "\nБой завершён"
-    
-    keyboard = await build_combat_kb(battle) if state["turn"] == "player" else None
-    
-    await event.ctx_api.messages.send(
-        peer_id=event.object.peer_id,
-        message=message,
-        keyboard=keyboard,
-        random_id=0,
-    )
-
 
 async def start_combat(event, player, dungeon):
     battle, has_battle = await BattleService.get_active_battle(player.vk_id)
@@ -425,25 +384,6 @@ async def start_combat(event, player, dungeon):
     kb = get_combat_kb(battle)
     
     await edit_message(event, msg, kb)
-
-
-def create_hp_bar(current_hp: int, max_hp: int, length: int = 10) -> str:
-    filled = int((current_hp / max_hp) * length)
-    empty = length - filled
-    
-    if current_hp > max_hp * 0.5:
-        color = "🟩"
-    elif current_hp > max_hp * 0.25:
-        color = "🟨"
-    else:
-        color = "🟥"
-    
-    bar = color * filled + "⬜" * empty
-    return f"[{bar}]"
-
-
-async def build_combat_kb(battle: "Battles"):
-    return get_combat_kb(battle).get_json()
 
 
 async def build_dungeon_room_kb(dungeon, room_data):
