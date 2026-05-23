@@ -8,7 +8,7 @@ from database.service.dungeon import DungeonService
 labeler = BotLabeler()
 
 
-@labeler.message(text="/start")
+@labeler.message(text="Начать")
 async def start_handler(message: Message):
     player = await UserService.GoC_user(message.from_id)
     dungeon, has_dungeon = await UserService.get_active_dungeon(player.vk_id)

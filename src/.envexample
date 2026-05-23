@@ -1,4 +1,4 @@
 VK_TOKEN=###################################
-DATABASE=sqlite+aiosqlite:///bot.db
+DATABASE=sqlite+aiosqlite:///db/bot.db
 DUNGEON_LOCATION=2
 HUB_LOCATION=1
